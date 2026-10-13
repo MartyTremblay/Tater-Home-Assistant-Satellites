@@ -55,13 +55,13 @@ integration from **Devices & services**.
 - Native Home Assistant Bluetooth proxying through compatible Echo satellites,
   including active GATT connections and six-digit PIN pairing without storing
   the PIN
-- Capability-routed wake profiles: ESP and MWW-only satellites use their own
-  microWakeWord settings, while Echo satellites can use MWW, OWW, or matched
-  Dual Wake Word detection
+- One shared wake profile with microWakeWord or matched Dual Wake Word mode;
+  ESP firmware receives the MWW model while capable Echo firmware also runs
+  its matching openWakeWord detector
 - Shared voice defaults and per-satellite settings for sensitivity, wake sounds,
   trainer captures, conversation behavior, AEC, microphone mute, voice-state
-  LEDs, Biscuit music-reactive LEDs, S3 Box screen brightness and night dimming,
-  and firmware logging
+  LEDs, music-reactive ring animations on supported Echo and ESP satellites, S3
+  Box screen brightness and night dimming, and firmware logging
 - Per-satellite speaker volume with a main-card slider and a standard Home
   Assistant number entity
 - Satellite1 output routing with automatic jack detection plus Internal, AUX,
@@ -154,30 +154,31 @@ ducked for the message and then resumes. The bridge also fires a
 states so Home Assistant automations can observe the feature without receiving
 the recorded audio.
 
-## Configure wake words by satellite family
+## Configure wake words
 
-Open **Tater Satellites -> Voice Defaults**. The bridge keeps two independent
-wake profiles and routes them from each connected satellite's advertised
-capabilities:
+Open **Tater Satellites -> Voice Defaults**. The bridge keeps one wake profile
+for every connected satellite. Choose one of two modes:
 
-- **ESP satellites** use microWakeWord. Choose built-in Hey Tater, a catalog
-  model, an uploaded model, or a custom package URL.
-- **Echo satellites** can use microWakeWord, openWakeWord, or **Dual Wake Word**.
-  Dual mode requires both detectors to agree before the microphone opens.
+- **microWakeWord** uses the same MWW selection on every satellite. Choose
+  built-in Hey Tater, a catalog model, an uploaded model, or a custom package
+  URL.
+- **Dual Wake Word** requires matching MWW and OWW detections before a capable
+  Echo opens the microphone. ESP and other MWW-only firmware use the MWW half
+  of that same profile.
 
-For a custom Echo Dual wake word, select a `.wake-bundle.json` produced by a
+For a custom Dual wake word, select a `.wake-bundle.json` produced by a
 Tater Wake Word Trainer. Home Assistant validates the bundle and derives both
 matching models from that one selection, so MWW and OWW cannot accidentally be
-configured for different phrases. Older firmware that does not advertise OWW
-support continues to receive only its MWW-compatible settings.
+configured for different phrases. Existing standalone OWW settings migrate to
+Dual mode; OWW is no longer exposed as a separate mode.
 
 ## Choose a catalog microWakeWord
 
-In the ESP profile, or while an Echo uses MWW-only mode, set **Wake word** to
-**Tater Wake Word Catalog**, and choose any versioned model from the official
-catalog. Home Assistant validates that the selected JSON package belongs to the
-Tater catalog, sends its URL through the existing custom-model firmware path,
-and reads the manifest phrase for STT wake verification.
+While using microWakeWord mode, set **Wake word** to **Tater Wake Word
+Catalog**, and choose any versioned model from the official catalog. Home
+Assistant validates that the selected JSON package belongs to the Tater
+catalog, sends its URL through the existing custom-model firmware path, and
+reads the manifest phrase for STT wake verification.
 
 The catalog is fetched asynchronously and cached for ten minutes. If a refresh
 temporarily fails, the bridge keeps the last successfully loaded list. You can
@@ -196,11 +197,10 @@ trained wake word directly to every Home Assistant-connected Tater satellite:
 
 After pairing, the trainer stores a device-specific credential and Home
 Assistant stores only its hash. A published microWakeWord URL must belong to the
-linked trainer and point to its trained wake-word API. Publishing updates the
-ESP/MWW profile and any Echo profile currently using MWW-only mode, clears only
-the conflicting per-satellite overrides for those families, and pushes the new
-model live. Echo Dual and OWW profiles remain unchanged until their matching
-wake bundle is selected.
+linked trainer and point to its trained wake-word API. Publishing selects MWW
+mode for the shared profile, clears conflicting per-satellite wake overrides,
+and pushes the new model to every connected satellite. Select a matching wake
+bundle afterward if you want to switch the shared profile back to Dual mode.
 
 ## STT wake verification
 

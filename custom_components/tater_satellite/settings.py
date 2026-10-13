@@ -55,7 +55,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "led_thinking_animation": "sparkle",
     "led_tool_call_animation": "ping_pong",
     "led_replying_animation": "voice_ring",
-    "led_music_animation": "audio_glow",
+    "led_music_animation": "music_bars",
     "logging_level": "info",
 }
 
@@ -122,7 +122,7 @@ OWW_WORD_SOURCE_OPTIONS = [
     {"value": "custom_url", "label": "Custom Tater wake bundle"},
 ]
 
-WAKE_DETECTOR_MODES = {"mww", "oww", "dual"}
+WAKE_DETECTOR_MODES = {"mww", "dual"}
 WAKE_FAMILIES = {"mww", "echo"}
 WAKE_FAMILY_SETTING_KEYS = {
     "wake_engine",
@@ -253,7 +253,6 @@ SETTINGS_SCHEMA: list[dict[str, Any]] = [
                 "key": "wake_engine",
                 "label": "Wake engine",
                 "type": "select",
-                "wake_families": ["mww"],
                 "options": [
                     {"value": "micro_wake_word", "label": "microWakeWord"},
                     {"value": "button", "label": "Button only"},
@@ -262,17 +261,17 @@ SETTINGS_SCHEMA: list[dict[str, Any]] = [
             },
             {
                 "key": "wake_detector_mode",
-                "label": "Wake engine",
+                "label": "Wake detection mode",
                 "type": "select",
                 "wake_families": ["echo"],
                 "options": [
                     {"value": "mww", "label": "microWakeWord"},
-                    {"value": "oww", "label": "openWakeWord"},
                     {"value": "dual", "label": "Dual Wake Word"},
                 ],
                 "description": (
-                    "Use either detector alone, or require both detectors to "
-                    "agree before opening the microphone."
+                    "Use microWakeWord on every satellite, or require matching "
+                    "microWakeWord and openWakeWord detections on satellites "
+                    "that support Dual mode."
                 ),
             },
             {
@@ -314,7 +313,7 @@ SETTINGS_SCHEMA: list[dict[str, Any]] = [
                 "label": "openWakeWord model",
                 "type": "select",
                 "wake_families": ["echo"],
-                "detector_modes": ["oww", "dual"],
+                "detector_modes": ["dual"],
                 "options": OWW_WORD_SOURCE_OPTIONS,
                 "description": (
                     "Use the built-in Hey Tater model or a matching dual-model "
@@ -326,7 +325,7 @@ SETTINGS_SCHEMA: list[dict[str, Any]] = [
                 "label": "Tater wake-bundle URL",
                 "type": "url",
                 "wake_families": ["echo"],
-                "detector_modes": ["oww", "dual"],
+                "detector_modes": ["dual"],
                 "show_when": {"key": "oww_wake_word", "equals": "custom_url"},
                 "placeholder": (
                     "http://trainer.local:8789/api/trained_wake_words/"
@@ -631,11 +630,26 @@ SETTINGS_SCHEMA: list[dict[str, Any]] = [
                 "key": "led_music_animation",
                 "label": "Music animation",
                 "type": "select",
-                "include_boards": ["biscuit"],
+                "include_boards": [
+                    "biscuit",
+                    "echo_dot_2",
+                    "echo_dot_2nd_gen",
+                    "radar",
+                    "echo_2",
+                    "echo_2_2017",
+                    "echo_2nd_gen",
+                    "voice_pe",
+                    "satellite1",
+                    "satellite_1",
+                    "sat1",
+                    "sat_1",
+                    "respeaker_xvf3800",
+                ],
                 "options": MUSIC_ANIMATION_OPTIONS,
                 "description": (
-                    "Audio-reactive Biscuit ring animation for music playback, "
-                    "including Sendspin."
+                    "Audio-reactive ring animation for music playback, including "
+                    "Sendspin. Track colors are used when the player provides "
+                    "them. Choose No Animation to keep the ring dark."
                 ),
             },
         ],
@@ -749,10 +763,32 @@ def board_supports_music_led_settings(board: Any) -> bool:
     """Return whether a board supports the audio-reactive music LED setting."""
     token = str(board or "").strip().lower().replace("_", "-").replace(" ", "-")
     compact = token.replace("-", "")
-    return token in {"biscuit", "echo-dot-2", "echo-dot-2nd-gen"} or compact in {
+    return token in {
+        "biscuit",
+        "echo-dot-2",
+        "echo-dot-2nd-gen",
+        "radar",
+        "echo-2",
+        "echo-2-2017",
+        "echo-2nd-gen",
+        "voice-pe",
+        "satellite1",
+        "satellite-1",
+        "sat1",
+        "sat-1",
+        "respeaker-xvf3800",
+    } or compact in {
         "biscuit",
         "echodot2",
         "echodot2ndgen",
+        "radar",
+        "echo2",
+        "echo22017",
+        "echo2ndgen",
+        "voicepe",
+        "satellite1",
+        "sat1",
+        "respeakerxvf3800",
     }
 
 
@@ -885,11 +921,13 @@ def normalize_settings(
 
     if "wake_detector_mode" in result or not partial:
         mode = str(result.get("wake_detector_mode") or "dual")
+        if mode == "oww":
+            mode = "dual"
         if mode not in WAKE_DETECTOR_MODES:
             mode = "dual"
         result["wake_detector_mode"] = mode
-        result["wake_mww_enabled"] = mode in {"mww", "dual"}
-        result["wake_oww_enabled"] = mode in {"oww", "dual"}
+        result["wake_mww_enabled"] = True
+        result["wake_oww_enabled"] = mode == "dual"
 
     return result
 
@@ -929,11 +967,13 @@ def normalize_wake_family_settings(
         if token == "mww"
         else str(current.get("wake_detector_mode") or "dual")
     )
+    if mode == "oww":
+        mode = "dual"
     if mode not in WAKE_DETECTOR_MODES:
         mode = "dual"
     current["wake_detector_mode"] = mode
-    current["wake_mww_enabled"] = mode in {"mww", "dual"}
-    current["wake_oww_enabled"] = mode in {"oww", "dual"}
+    current["wake_mww_enabled"] = True
+    current["wake_oww_enabled"] = mode == "dual"
     return {key: current[key] for key in WAKE_FAMILY_SETTING_KEYS if key in current}
 
 
@@ -1001,6 +1041,11 @@ def firmware_payload(
             "oww_wake_word_url",
             "oww_model_revision",
         ):
+            payload.pop(key, None)
+    elif normalized.get("wake_detector_mode") == "mww":
+        payload["wake_mww_enabled"] = True
+        payload["wake_oww_enabled"] = False
+        for key in ("oww_wake_word", "oww_wake_word_url", "oww_model_revision"):
             payload.pop(key, None)
     elif (
         payload.get("wake_mww_enabled")

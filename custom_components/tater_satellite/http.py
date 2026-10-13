@@ -136,14 +136,14 @@ class GlobalSettingsView(HomeAssistantView):
 
 
 class WakeFamilySettingsView(HomeAssistantView):
-    """Manage the shared ESP/MWW and Echo wake profiles."""
+    """Keep the former family endpoint available for older clients."""
 
     url = f"{API_BASE_PATH}/settings/wake-family/{{family}}"
     name = "api:tater_satellite:settings_wake_family"
     requires_auth = True
 
     async def post(self, request: web.Request, family: str) -> web.Response:
-        """Save one capability-routed wake profile."""
+        """Save the shared wake profile through a legacy family route."""
         body = await _json_body(request)
         values = body.get("settings")
         if not isinstance(values, dict):
@@ -156,6 +156,26 @@ class WakeFamilySettingsView(HomeAssistantView):
         except (KeyError, ValueError, RuntimeError) as err:
             raise web.HTTPBadRequest(text=str(err)) from err
         return self.json({"ok": True, "family": family, "settings": saved})
+
+
+class SharedWakeSettingsView(HomeAssistantView):
+    """Manage the one wake profile shared by every satellite."""
+
+    url = f"{API_BASE_PATH}/settings/wake"
+    name = "api:tater_satellite:settings_wake"
+    requires_auth = True
+
+    async def post(self, request: web.Request) -> web.Response:
+        """Save the shared MWW or Dual wake profile."""
+        body = await _json_body(request)
+        values = body.get("settings")
+        if not isinstance(values, dict):
+            values = body
+        try:
+            saved = await _manager(request).async_set_shared_wake_settings(values)
+        except (KeyError, ValueError, RuntimeError) as err:
+            raise web.HTTPBadRequest(text=str(err)) from err
+        return self.json({"ok": True, "settings": saved})
 
 
 class DeviceSettingsView(HomeAssistantView):
@@ -560,6 +580,7 @@ VIEWS = (
     BluetoothPairView,
     BluetoothUnpairView,
     GlobalSettingsView,
+    SharedWakeSettingsView,
     WakeFamilySettingsView,
     DeviceSettingsView,
     DeviceSettingsResetView,

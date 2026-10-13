@@ -123,7 +123,7 @@ class WakeFamilySettingsTests(unittest.TestCase):
             "https://example.test/hey.wake-bundle.json",
         )
 
-    def test_schema_presents_one_wake_engine_per_family(self) -> None:
+    def test_schema_presents_one_shared_mww_or_dual_choice(self) -> None:
         wake = next(
             section
             for section in settings.SETTINGS_SCHEMA
@@ -131,34 +131,77 @@ class WakeFamilySettingsTests(unittest.TestCase):
         )
         fields = {field["key"]: field for field in wake["fields"]}
 
-        self.assertEqual(fields["wake_engine"]["wake_families"], ["mww"])
+        self.assertNotIn("wake_families", fields["wake_engine"])
         self.assertEqual(fields["wake_detector_mode"]["wake_families"], ["echo"])
-        self.assertEqual(fields["wake_detector_mode"]["label"], "Wake engine")
+        self.assertEqual(
+            fields["wake_detector_mode"]["label"], "Wake detection mode"
+        )
         self.assertEqual(fields["wake_word"]["detector_modes"], ["mww"])
         self.assertEqual(fields["oww_wake_word"]["wake_families"], ["echo"])
+        self.assertEqual(fields["oww_wake_word"]["detector_modes"], ["dual"])
         self.assertEqual(
             {row["value"] for row in fields["wake_detector_mode"]["options"]},
-            {"mww", "oww", "dual"},
+            {"mww", "dual"},
         )
 
-    def test_manager_and_panel_route_profiles_by_satellite_family(self) -> None:
+    def test_manager_and_panel_use_one_shared_wake_profile(self) -> None:
         manager = MANAGER_PATH.read_text(encoding="utf-8")
         http = HTTP_PATH.read_text(encoding="utf-8")
         assist = ASSIST_PATH.read_text(encoding="utf-8")
         panel = PANEL_PATH.read_text(encoding="utf-8")
 
+        self.assertIn("def shared_wake_settings(", manager)
         self.assertIn("def wake_family_settings(", manager)
         self.assertIn("wake_family_for(", manager)
+        self.assertIn("async def async_set_shared_wake_settings(", manager)
         self.assertIn("async def async_set_wake_family_settings(", manager)
         self.assertIn("await self._async_wake_bundle(oww_url)", manager)
-        self.assertIn('settings.get("oww_wake_word") if oww_only', manager)
+        self.assertIn('families["echo"] = next_settings', manager)
+        self.assertIn('families["mww"] = normalize_wake_family_settings(', manager)
+        self.assertIn("class SharedWakeSettingsView", http)
         self.assertIn("class WakeFamilySettingsView", http)
         self.assertIn('settings/wake-family/{{family}}', http)
-        self.assertIn("How should ESP firmware wake?", panel)
-        self.assertIn("How should Echo firmware wake?", panel)
-        self.assertIn("settings/wake-family/${family}", panel)
+        self.assertIn("How should satellites wake?", panel)
+        self.assertNotIn("How should ESP firmware wake?", panel)
+        self.assertNotIn("How should Echo firmware wake?", panel)
+        self.assertIn('"settings/wake"', panel)
+        self.assertIn("this._wakeDraft", panel)
         self.assertIn("WAKE_FAMILY_SETTING_KEYS.forEach", panel)
         self.assertGreaterEqual(assist.count('"wake_detector_mode": "mww"'), 3)
+
+    def test_legacy_oww_only_mode_migrates_to_dual(self) -> None:
+        profile = settings.normalize_wake_family_settings(
+            "echo",
+            {
+                "wake_detector_mode": "oww",
+                "wake_mww_enabled": False,
+                "wake_oww_enabled": True,
+            },
+        )
+
+        self.assertEqual(profile["wake_detector_mode"], "dual")
+        self.assertTrue(profile["wake_mww_enabled"])
+        self.assertTrue(profile["wake_oww_enabled"])
+
+    def test_echo_mww_mode_does_not_send_openwakeword_settings(self) -> None:
+        profile = settings.normalize_wake_family_settings(
+            "echo",
+            {
+                "wake_detector_mode": "mww",
+                "oww_wake_word": "custom_url",
+                "oww_wake_word_url": "https://example.test/hey.wake-bundle.json",
+            },
+        )
+        payload = settings.firmware_payload(
+            profile,
+            board="biscuit",
+            capabilities={"dual_wake_confirmation": True},
+        )
+
+        self.assertTrue(payload["wake_mww_enabled"])
+        self.assertFalse(payload["wake_oww_enabled"])
+        self.assertNotIn("oww_wake_word", payload)
+        self.assertNotIn("oww_wake_word_url", payload)
 
     def test_panel_live_refresh_preserves_active_editor_controls(self) -> None:
         panel = PANEL_PATH.read_text(encoding="utf-8")

@@ -135,8 +135,7 @@ class TaterSatellitePanel extends HTMLElement {
     this._tab = "satellites";
     this._selectedDeviceId = "";
     this._globalDraft = null;
-    this._mwwDraft = null;
-    this._echoDraft = null;
+    this._wakeDraft = null;
     this._deviceDraft = null;
     this._deviceOriginal = null;
     this._pipelineDraft = "";
@@ -220,8 +219,12 @@ class TaterSatellitePanel extends HTMLElement {
       this._error = "";
       if (!this._globalDraft || !this._dirty) {
         this._globalDraft = this.prepareSettingsDraft(data.global_settings);
-        this._mwwDraft = this.prepareSettingsDraft(data.wake_family_settings?.mww || {});
-        this._echoDraft = this.prepareSettingsDraft(data.wake_family_settings?.echo || {});
+        this._wakeDraft = this.prepareSettingsDraft(
+          data.shared_wake_settings ||
+            data.wake_family_settings?.echo ||
+            data.wake_family_settings?.mww ||
+            {},
+        );
       }
       if (this._selectedDeviceId && !this._dirty) {
         this.prepareDeviceDraft(this._selectedDeviceId, false);
@@ -1081,21 +1084,10 @@ class TaterSatellitePanel extends HTMLElement {
       <div class="editor-head">
         <div>
           <h2>Shared Satellite Voice Settings</h2>
-          <div class="muted">Wake models are routed by firmware capability. ESP and MWW-only satellites keep their own profile; Echo firmware can use MWW, OWW, or require both in Dual mode.</div>
+          <div class="muted">One wake profile is shared by every satellite. MWW runs on all supported firmware; Dual adds matching openWakeWord confirmation on capable Echo firmware while ESP satellites use the bundle's MWW half.</div>
         </div>
       </div>
-      ${this.renderWakeFamilyEditor(
-        "mww",
-        "ESP satellites",
-        "How should ESP firmware wake?",
-        this._mwwDraft || {},
-      )}
-      ${this.renderWakeFamilyEditor(
-        "echo",
-        "Echo satellites",
-        "How should Echo firmware wake?",
-        this._echoDraft || {},
-      )}
+      ${this.renderSharedWakeEditor(this._wakeDraft || {})}
       ${this.renderSettingsSections(this._globalDraft || {}, "global", null, { exclude: ["wake", "feedback", "verifier"] })}
       <div class="sticky-actions">
         <button data-action="reset-draft">Discard shared changes</button>
@@ -1104,23 +1096,21 @@ class TaterSatellitePanel extends HTMLElement {
     `;
   }
 
-  renderWakeFamilyEditor(family, eyebrow, title, values) {
-    const connected = (this._data.devices || []).filter(
-      (device) => device.connected && device.wake_family === family,
-    ).length;
+  renderSharedWakeEditor(values) {
+    const connected = (this._data.devices || []).filter((device) => device.connected).length;
     return `
       <section class="card section-card">
         <div class="device-head">
           <div>
-            <div class="muted" style="text-transform:uppercase;font-size:12px;font-weight:700;letter-spacing:.08em">Step 1 · ${escapeHtml(eyebrow)}</div>
-            <h3 style="margin-top:6px">${escapeHtml(title)}</h3>
+            <div class="muted" style="text-transform:uppercase;font-size:12px;font-weight:700;letter-spacing:.08em">Step 1 · All satellites</div>
+            <h3 style="margin-top:6px">How should satellites wake?</h3>
           </div>
           <span class="badge ${connected ? "online" : ""}">${connected} connected</span>
         </div>
-        ${this.renderSettingsSections(values, family, { wake_family: family }, { include: ["wake"], wakeFamily: family, bare: true })}
+        ${this.renderSettingsSections(values, "wake", null, { include: ["wake"], wakeFamily: "echo", bare: true })}
         <div class="row-actions" style="margin-top:15px">
-          <button data-reset-wake-family="${family}">Discard ${family === "echo" ? "Echo" : "ESP"} changes</button>
-          <button class="primary" data-save-wake-family="${family}" ${this._loading ? "disabled" : ""}>Save and update ${family === "echo" ? "Echo" : "ESP"} satellites</button>
+          <button data-reset-shared-wake>Discard wake changes</button>
+          <button class="primary" data-save-shared-wake ${this._loading ? "disabled" : ""}>Save and update all satellites</button>
         </div>
       </section>
     `;
@@ -1811,8 +1801,7 @@ class TaterSatellitePanel extends HTMLElement {
       input.addEventListener("change", () => {
         const target = {
           global: this._globalDraft,
-          mww: this._mwwDraft,
-          echo: this._echoDraft,
+          wake: this._wakeDraft,
         }[input.dataset.scope] || this._deviceDraft;
         let value = input.type === "checkbox" ? input.checked : input.value;
         if (input.type === "number") value = Number(value);
@@ -1882,30 +1871,30 @@ class TaterSatellitePanel extends HTMLElement {
           : "Shared satellite settings saved and pushed live.",
       ),
     );
-    root.querySelectorAll("[data-save-wake-family]").forEach((button) =>
-      button.addEventListener("click", () => {
-        const family = button.dataset.saveWakeFamily;
-        const settings = family === "echo" ? this._echoDraft : this._mwwDraft;
-        this.run(
-          () => this.api("POST", `settings/wake-family/${family}`, { settings }),
-          `${family === "echo" ? "Echo" : "ESP"} wake settings saved and pushed live.`,
-        );
-      }),
+    root.querySelector("[data-save-shared-wake]")?.addEventListener("click", () =>
+      this.run(
+        () => this.api("POST", "settings/wake", { settings: this._wakeDraft }),
+        "Wake settings saved and pushed to all satellites.",
+      ),
     );
-    root.querySelectorAll("[data-reset-wake-family]").forEach((button) =>
-      button.addEventListener("click", () => {
-        const family = button.dataset.resetWakeFamily;
-        const values = this._data.wake_family_settings?.[family] || {};
-        if (family === "echo") this._echoDraft = this.prepareSettingsDraft(values);
-        else this._mwwDraft = this.prepareSettingsDraft(values);
-        this._dirty = false;
-        this.render();
-      }),
-    );
+    root.querySelector("[data-reset-shared-wake]")?.addEventListener("click", () => {
+      const values =
+        this._data.shared_wake_settings ||
+        this._data.wake_family_settings?.echo ||
+        this._data.wake_family_settings?.mww ||
+        {};
+      this._wakeDraft = this.prepareSettingsDraft(values);
+      this._dirty = false;
+      this.render();
+    });
     root.querySelector('[data-action="reset-draft"]')?.addEventListener("click", () => {
       this._globalDraft = this.prepareSettingsDraft(this._data.global_settings);
-      this._mwwDraft = this.prepareSettingsDraft(this._data.wake_family_settings?.mww || {});
-      this._echoDraft = this.prepareSettingsDraft(this._data.wake_family_settings?.echo || {});
+      this._wakeDraft = this.prepareSettingsDraft(
+        this._data.shared_wake_settings ||
+          this._data.wake_family_settings?.echo ||
+          this._data.wake_family_settings?.mww ||
+          {},
+      );
       this._dirty = false;
       this.render();
     });
@@ -1997,13 +1986,11 @@ class TaterSatellitePanel extends HTMLElement {
         this._dirty = false;
         await this.load(true);
         const target =
-          scope === "mww"
-            ? this._mwwDraft
-            : scope === "echo"
-              ? this._echoDraft
-              : scope === "global"
-                ? this._globalDraft
-                : this._deviceDraft;
+          scope === "wake"
+            ? this._wakeDraft
+            : scope === "global"
+              ? this._globalDraft
+              : this._deviceDraft;
         target[settingKey] = result.asset.id;
         if (kind === "wake_model") target.wake_word = "custom_url";
         if (kind === "wake_sound") target.wake_sound = "custom";

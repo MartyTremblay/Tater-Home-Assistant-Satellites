@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.9.0
+
+- Replaced separate ESP and Echo wake profiles with one shared wake-word setup.
+  Choose microWakeWord or Dual Wake Word once; ESP firmware receives the MWW
+  model, while capable Echo firmware receives the matching MWW+OWW pair.
+- Existing standalone openWakeWord selections migrate to Dual mode, and custom
+  MWW selections are preserved when upgrading from the former split profiles.
+- Expanded music-reactive LED settings beyond Biscuit to Echo 2/Radar, Voice
+  PE, Satellite1, and ReSpeaker XVF3800 satellites. The selected animation also
+  follows Sendspin playback and can be disabled with **No Animation**.
+
 ## 0.8.0
 
 - Added native Home Assistant Bluetooth proxy support through compatible Echo

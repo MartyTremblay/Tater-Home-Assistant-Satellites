@@ -34,7 +34,7 @@ class LedSettingsTests(unittest.TestCase):
             self.assertEqual(options[0], {"value": "off", "label": "No Animation"})
             self.assertEqual(settings.normalize_settings({key: "off"})[key], "off")
 
-    def test_music_animation_is_biscuit_only(self) -> None:
+    def test_music_animation_is_available_on_echo_and_esp_ring_boards(self) -> None:
         expected = {
             "off",
             "audio_glow",
@@ -51,12 +51,25 @@ class LedSettingsTests(unittest.TestCase):
             settings.firmware_payload(values, board="biscuit")["led_music_animation"],
             "music_wave",
         )
-        self.assertNotIn(
-            "led_music_animation",
-            settings.firmware_payload(values, board="voice-pe"),
-        )
+        for board in (
+            "radar",
+            "voice-pe",
+            "satellite1",
+            "respeaker-xvf3800",
+        ):
+            self.assertEqual(
+                settings.firmware_payload(values, board=board)[
+                    "led_music_animation"
+                ],
+                "music_wave",
+            )
+        for board in ("s3-box", "thirdreality-s420"):
+            self.assertNotIn(
+                "led_music_animation",
+                settings.firmware_payload(values, board=board),
+            )
 
-    def test_panel_and_entity_expose_music_animation_only_for_biscuit(self) -> None:
+    def test_panel_and_entity_expose_music_animation_for_supported_boards(self) -> None:
         led_section = next(
             row for row in settings.SETTINGS_SCHEMA if row["section"] == "led"
         )
@@ -65,7 +78,15 @@ class LedSettingsTests(unittest.TestCase):
             for field in led_section["fields"]
             if field["key"] == "led_music_animation"
         )
-        self.assertEqual(music["include_boards"], ["biscuit"])
+        self.assertTrue(
+            {
+                "biscuit",
+                "radar",
+                "voice_pe",
+                "satellite1",
+                "respeaker_xvf3800",
+            }.issubset(set(music["include_boards"]))
+        )
 
         panel = PANEL_PATH.read_text(encoding="utf-8")
         selects = SELECT_PATH.read_text(encoding="utf-8")
