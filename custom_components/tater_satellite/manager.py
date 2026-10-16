@@ -55,6 +55,7 @@ from .protocol import (
     parse_text_message,
     text,
 )
+from .sat_chat import MAX_SAT_CHAT_FRAME_BYTES, TaterSatChatCoordinator
 from .settings import (
     DEFAULT_SETTINGS,
     SETTINGS_SCHEMA,
@@ -385,6 +386,21 @@ class SatelliteRuntime:
                 if websocket.closed:
                     return False
                 await websocket.send_str(_compact_json(message))
+            return True
+        except (ConnectionError, RuntimeError) as err:
+            self.last_error = text(err) or type(err).__name__
+            return False
+
+    async def async_send_bytes(self, data: bytes) -> bool:
+        """Send one binary media frame over the authenticated device socket."""
+        websocket = self.websocket
+        if websocket is None or websocket.closed or not data:
+            return False
+        try:
+            async with self.send_lock:
+                if websocket.closed:
+                    return False
+                await websocket.send_bytes(bytes(data))
             return True
         except (ConnectionError, RuntimeError) as err:
             self.last_error = text(err) or type(err).__name__
@@ -746,6 +762,7 @@ class TaterSatelliteManager:
         self.trainer = TrainerLinkManager(self)
         self.media = TaterMediaCoordinator(self)
         self.intercom = TaterIntercomCoordinator(self)
+        self.sat_chat = TaterSatChatCoordinator(self)
         self.bluetooth = TaterBluetoothProxyManager(self)
         self._save_lock = asyncio.Lock()
         self._pairing_code = ""
@@ -928,6 +945,7 @@ class TaterSatelliteManager:
         """Close all device connections."""
         self._shutting_down = True
         await self.bluetooth.async_shutdown()
+        await self.sat_chat.async_shutdown()
         await self.intercom.async_shutdown()
         await self.media.async_shutdown()
         for runtime in tuple(self.runtimes.values()):
@@ -2230,6 +2248,7 @@ class TaterSatelliteManager:
             "assets": assets,
             "stereo_pairs": self.media.list_pairs(),
             "intercom": self.intercom.snapshot(),
+            "sat_chat": self.sat_chat.snapshot(),
             "bluetooth": self.bluetooth.snapshot(),
             "pipelines": self.pipelines_snapshot(),
             "firmware": self.firmware.snapshot(),
@@ -2279,6 +2298,17 @@ class TaterSatelliteManager:
         if self.media.handle_message(runtime, kind, payload):
             runtime.notify()
             return
+        if kind.startswith("sat_chat."):
+            result = await self.sat_chat.async_handle_message(runtime, kind, payload)
+            if result is not None:
+                await runtime.async_send_json(
+                    envelope(
+                        f"{kind}.ack",
+                        result,
+                        message_id=text(message.get("id")),
+                    )
+                )
+                return
         if kind == "status":
             runtime.last_status = payload
             runtime.note_settings_status()
@@ -2425,7 +2455,7 @@ class TaterSatelliteManager:
         # A second aiohttp heartbeat can expire while the ESP32 is streaming or
         # fetching TTS audio, causing a healthy completed turn to reconnect.
         websocket = web.WebSocketResponse(
-            max_msg_size=max(MAX_TEXT_MESSAGE_BYTES, 2 * 1024 * 1024),
+            max_msg_size=max(MAX_TEXT_MESSAGE_BYTES, MAX_SAT_CHAT_FRAME_BYTES),
             autoclose=True,
         )
         await websocket.prepare(request)
@@ -2493,6 +2523,8 @@ class TaterSatelliteManager:
                     "sendspin_source": True,
                     "stereo_pairs": True,
                     "intercom": True,
+                    "sat_chat": True,
+                    "sat_chat_audio": True,
                 },
             }
             if new_token:
@@ -2551,6 +2583,7 @@ class TaterSatelliteManager:
             await runtime.async_send("state", {"state": "idle"})
             await self.async_push_settings(runtime)
             runtime.notify()
+            await self.sat_chat.async_refresh_directories()
 
             async for frame in websocket:
                 if frame.type == WSMsgType.TEXT:
@@ -2578,6 +2611,8 @@ class TaterSatelliteManager:
                         )
                 elif frame.type == WSMsgType.BINARY:
                     data = bytes(frame.data or b"")
+                    if await self.sat_chat.async_route_binary(runtime, data):
+                        continue
                     if self.intercom.add_audio(runtime, data):
                         continue
                     if is_wake_verifier_packet(data):
@@ -2632,6 +2667,7 @@ class TaterSatelliteManager:
                         )
                 runtime.websocket = None
                 runtime.connected = False
+                await self.sat_chat.async_handle_disconnect(runtime)
                 runtime.ota.note_disconnect()
                 runtime.finish_audio()
                 runtime.fail_playback_waiters()

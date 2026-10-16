@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.9.1
+
+- Added direct Sat Chat audio and video calls between compatible satellites
+  connected to Home Assistant, without routing live media through Assist.
+- Relayed the Echo firmware's tagged JPEG video frames over the existing
+  authenticated satellite WebSockets with a latest-frame-only queue so slow
+  displays cannot build latency or delay call audio.
+- Added live participant and busy-state directories, capability validation,
+  call cleanup on disconnect, and transient call diagnostics. Call media and
+  state remain in memory and are never persisted by the integration.
+
 ## 0.9.0
 
 - Replaced separate ESP and Echo wake profiles with one shared wake-word setup.

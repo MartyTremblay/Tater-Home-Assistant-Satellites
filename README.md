@@ -47,6 +47,8 @@ integration from **Devices & services**.
 - Optional STT wake verification through each satellite's selected Assist
   pipeline, with Disabled, Observe, and Enabled modes plus per-satellite results
 - Announcements, continued conversations, timers, TTS playback, and diagnostics
+- Direct Sat Chat audio and video calls between compatible satellites, relayed
+  locally over their existing authenticated connections
 - Native Home Assistant media-player entities with URL and media-source music
   playback, seek, stop, mute, volume, and dynamic grouping
 - Saved left/right stereo-pair media players plus Sendspin-synchronized
@@ -153,6 +155,19 @@ ducked for the message and then resumes. The bridge also fires a
 `tater_satellite_intercom` event for start, delivery, cancellation, and failure
 states so Home Assistant automations can observe the feature without receiving
 the recorded audio.
+
+## Sat Chat
+
+Compatible Echo satellites can start live audio or video calls from their Sat
+Chat screen. Home Assistant keeps only the transient call directory and routes
+16 kHz PCM plus tagged JPEG frames directly between the two authenticated
+satellite WebSockets. Sat Chat does not enter the Assist pipeline and no call
+audio, video, or history is persisted.
+
+Video uses a one-frame best-effort queue. If a receiving display briefly falls
+behind, the bridge discards the old waiting image and sends the newest one so
+live audio and call controls remain responsive. Calls end automatically when
+either satellite disconnects.
 
 ## Configure wake words
 
