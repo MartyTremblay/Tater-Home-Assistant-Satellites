@@ -851,7 +851,8 @@ class TaterSatelliteManager:
             ):
                 # The old OWW-only row stored the bundle but did not need its
                 # MWW manifest. Resolve that matching half before turning the
-                # profile into Dual so the two detectors cannot diverge.
+                # profile into the shared OWW-with-MWW-fallback mode so the
+                # two firmware families cannot diverge on the wake phrase.
                 try:
                     bundle = await self._async_wake_bundle(
                         text(selected.get("oww_wake_word_url"))
@@ -876,8 +877,8 @@ class TaterSatelliteManager:
                 else:
                     selected = {
                         **selected,
-                        "wake_detector_mode": "dual",
-                        "wake_mww_enabled": True,
+                        "wake_detector_mode": "oww",
+                        "wake_mww_enabled": False,
                         "wake_oww_enabled": True,
                         "wake_word": "custom_url",
                         "wake_word_url": bundle["manifest_url"],
@@ -893,7 +894,7 @@ class TaterSatelliteManager:
             self.data[_UNIFIED_WAKE_SETTINGS_MIGRATION_KEY] = True
             migrated_wake_families = True
         # Echo remains the persisted canonical row because it can represent
-        # both MWW and Dual. Keep an MWW-only mirror for downgrade compatibility.
+        # MWW, OWW, and Dual. Keep an MWW-only mirror for compatibility.
         normalized_families["mww"] = normalize_wake_family_settings(
             "mww",
             normalized_families["echo"],
@@ -1431,11 +1432,9 @@ class TaterSatelliteManager:
         mode = text(
             incoming.get("wake_detector_mode") or current.get("wake_detector_mode")
         ).lower()
-        if mode == "oww":
+        if mode not in {"mww", "oww", "dual"}:
             mode = "dual"
-        if mode not in {"mww", "dual"}:
-            mode = "dual"
-        if mode == "dual":
+        if mode in {"oww", "dual"}:
             oww_source = text(
                 incoming.get("oww_wake_word", current.get("oww_wake_word"))
             ).lower()
@@ -1459,8 +1458,8 @@ class TaterSatelliteManager:
                     }
                 )
             else:
-                # Built-in Dual always pairs the two Hey Tater models. This
-                # prevents accidentally requiring two different phrases.
+                # Built-in OWW and Dual modes always pair the two Hey Tater
+                # models so MWW-only satellites use the same phrase.
                 incoming.update(
                     {
                         "wake_word": "hey_tater",
@@ -1605,7 +1604,7 @@ class TaterSatelliteManager:
             families = self.data.setdefault("wake_family_settings", {})
             shared_current = self.shared_wake_settings()
             if (
-                shared_current.get("wake_detector_mode") == "dual"
+                shared_current.get("wake_detector_mode") in {"oww", "dual"}
                 and legacy_family_patch.get("wake_word") == "custom_url"
                 and "oww_wake_word_url" not in legacy_family_patch
             ):
@@ -1782,9 +1781,7 @@ class TaterSatelliteManager:
         elif wake_changed:
             candidate = {**base, **device_values}
             mode = text(candidate.get("wake_detector_mode")).lower()
-            if mode == "oww":
-                mode = "dual"
-            if mode not in {"mww", "dual"}:
+            if mode not in {"mww", "oww", "dual"}:
                 mode = "dual"
             device_values["wake_detector_mode"] = mode
             pairing_keys = {
@@ -1795,7 +1792,7 @@ class TaterSatelliteManager:
                 "oww_wake_word",
                 "oww_wake_word_url",
             }
-            if mode == "dual" and pairing_keys.intersection(
+            if mode in {"oww", "dual"} and pairing_keys.intersection(
                 wake_change_keys
             ):
                 oww_source = text(candidate.get("oww_wake_word")).lower()
@@ -1806,20 +1803,19 @@ class TaterSatelliteManager:
                     device_values["oww_model_revision"] = device_bundle_profile[
                         "oww_model_revision"
                     ]
-                    if mode == "dual":
-                        device_values.update(
-                            {
-                                "wake_word": "custom_url",
-                                "wake_word_url": device_bundle_profile[
-                                    "manifest_url"
-                                ],
-                                "wake_model_asset_id": "",
-                                "wake_model_revision": device_bundle_profile[
-                                    "wake_model_revision"
-                                ],
-                            }
-                        )
-                elif mode == "dual":
+                    device_values.update(
+                        {
+                            "wake_word": "custom_url",
+                            "wake_word_url": device_bundle_profile[
+                                "manifest_url"
+                            ],
+                            "wake_model_asset_id": "",
+                            "wake_model_revision": device_bundle_profile[
+                                "wake_model_revision"
+                            ],
+                        }
+                    )
+                else:
                     device_values.update(
                         {
                             "wake_word": "hey_tater",

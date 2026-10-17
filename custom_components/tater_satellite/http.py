@@ -166,7 +166,7 @@ class SharedWakeSettingsView(HomeAssistantView):
     requires_auth = True
 
     async def post(self, request: web.Request) -> web.Response:
-        """Save the shared MWW or Dual wake profile."""
+        """Save the shared MWW, OWW-where-supported, or Dual wake profile."""
         body = await _json_body(request)
         values = body.get("settings")
         if not isinstance(values, dict):

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.9.2
+
+- Added **OWW Where Supported** to the shared wake-detection setting. Capable
+  satellites receive openWakeWord-only detection while ESP32 and other
+  MWW-only satellites automatically receive the matching microWakeWord model.
+- Custom OWW and Dual selections continue to use one validated wake bundle so
+  every satellite listens for the same phrase.
+- Simplified the settings labels: the wake engine now says **On-device wake
+  detection**, and the built-in/custom selector is named **Wake word model**.
+
 ## 0.9.1
 
 - Added direct Sat Chat audio and video calls between compatible satellites

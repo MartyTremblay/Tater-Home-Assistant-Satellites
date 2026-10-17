@@ -122,7 +122,7 @@ OWW_WORD_SOURCE_OPTIONS = [
     {"value": "custom_url", "label": "Custom Tater wake bundle"},
 ]
 
-WAKE_DETECTOR_MODES = {"mww", "dual"}
+WAKE_DETECTOR_MODES = {"mww", "oww", "dual"}
 WAKE_FAMILIES = {"mww", "echo"}
 WAKE_FAMILY_SETTING_KEYS = {
     "wake_engine",
@@ -254,7 +254,10 @@ SETTINGS_SCHEMA: list[dict[str, Any]] = [
                 "label": "Wake engine",
                 "type": "select",
                 "options": [
-                    {"value": "micro_wake_word", "label": "microWakeWord"},
+                    {
+                        "value": "micro_wake_word",
+                        "label": "On-device wake detection",
+                    },
                     {"value": "button", "label": "Button only"},
                     {"value": "off", "label": "Off"},
                 ],
@@ -265,13 +268,14 @@ SETTINGS_SCHEMA: list[dict[str, Any]] = [
                 "type": "select",
                 "wake_families": ["echo"],
                 "options": [
-                    {"value": "mww", "label": "microWakeWord"},
+                    {"value": "mww", "label": "microWakeWord Only"},
+                    {"value": "oww", "label": "OWW Where Supported"},
                     {"value": "dual", "label": "Dual Wake Word"},
                 ],
                 "description": (
-                    "Use microWakeWord on every satellite, or require matching "
-                    "microWakeWord and openWakeWord detections on satellites "
-                    "that support Dual mode."
+                    "Use microWakeWord on every satellite, openWakeWord on "
+                    "capable satellites with an MWW fallback elsewhere, or "
+                    "require both matching detectors on capable satellites."
                 ),
             },
             {
@@ -310,14 +314,14 @@ SETTINGS_SCHEMA: list[dict[str, Any]] = [
             },
             {
                 "key": "oww_wake_word",
-                "label": "openWakeWord model",
+                "label": "Wake word model",
                 "type": "select",
                 "wake_families": ["echo"],
-                "detector_modes": ["dual"],
+                "detector_modes": ["oww", "dual"],
                 "options": OWW_WORD_SOURCE_OPTIONS,
                 "description": (
-                    "Use the built-in Hey Tater model or a matching dual-model "
-                    "bundle produced by a Tater Wake Word Trainer."
+                    "Choose built-in Hey Tater or a matched wake bundle. The "
+                    "bridge sends the appropriate model to each satellite."
                 ),
             },
             {
@@ -325,7 +329,7 @@ SETTINGS_SCHEMA: list[dict[str, Any]] = [
                 "label": "Tater wake-bundle URL",
                 "type": "url",
                 "wake_families": ["echo"],
-                "detector_modes": ["dual"],
+                "detector_modes": ["oww", "dual"],
                 "show_when": {"key": "oww_wake_word", "equals": "custom_url"},
                 "placeholder": (
                     "http://trainer.local:8789/api/trained_wake_words/"
@@ -336,7 +340,7 @@ SETTINGS_SCHEMA: list[dict[str, Any]] = [
                 "key": "wake_sensitivity",
                 "label": "Wake sensitivity",
                 "type": "select",
-                "detector_modes": ["mww", "dual"],
+                "detector_modes": ["mww", "oww", "dual"],
                 "options": [
                     {"value": "conservative", "label": "Conservative"},
                     {"value": "normal", "label": "Normal"},
@@ -347,7 +351,7 @@ SETTINGS_SCHEMA: list[dict[str, Any]] = [
                 "key": "wake_environment",
                 "label": "Wake environment",
                 "type": "select",
-                "detector_modes": ["mww", "dual"],
+                "detector_modes": ["mww", "oww", "dual"],
                 "options": [
                     {"value": "balanced", "label": "Balanced"},
                     {"value": "tv_nearby", "label": "TV Nearby"},
@@ -921,13 +925,11 @@ def normalize_settings(
 
     if "wake_detector_mode" in result or not partial:
         mode = str(result.get("wake_detector_mode") or "dual")
-        if mode == "oww":
-            mode = "dual"
         if mode not in WAKE_DETECTOR_MODES:
             mode = "dual"
         result["wake_detector_mode"] = mode
-        result["wake_mww_enabled"] = True
-        result["wake_oww_enabled"] = mode == "dual"
+        result["wake_mww_enabled"] = mode in {"mww", "dual"}
+        result["wake_oww_enabled"] = mode in {"oww", "dual"}
 
     return result
 
@@ -967,13 +969,11 @@ def normalize_wake_family_settings(
         if token == "mww"
         else str(current.get("wake_detector_mode") or "dual")
     )
-    if mode == "oww":
-        mode = "dual"
     if mode not in WAKE_DETECTOR_MODES:
         mode = "dual"
     current["wake_detector_mode"] = mode
-    current["wake_mww_enabled"] = True
-    current["wake_oww_enabled"] = mode == "dual"
+    current["wake_mww_enabled"] = mode in {"mww", "dual"}
+    current["wake_oww_enabled"] = mode in {"oww", "dual"}
     return {key: current[key] for key in WAKE_FAMILY_SETTING_KEYS if key in current}
 
 
@@ -1042,18 +1042,19 @@ def firmware_payload(
             "oww_model_revision",
         ):
             payload.pop(key, None)
-    elif normalized.get("wake_detector_mode") == "mww":
-        payload["wake_mww_enabled"] = True
-        payload["wake_oww_enabled"] = False
-        for key in ("oww_wake_word", "oww_wake_word_url", "oww_model_revision"):
-            payload.pop(key, None)
-    elif (
-        payload.get("wake_mww_enabled")
-        and payload.get("wake_oww_enabled")
+    else:
+        mode = str(normalized.get("wake_detector_mode") or "dual")
+        payload["wake_mww_enabled"] = mode in {"mww", "dual"}
+        payload["wake_oww_enabled"] = mode in {"oww", "dual"}
+        if mode == "mww":
+            for key in ("oww_wake_word", "oww_wake_word_url", "oww_model_revision"):
+                payload.pop(key, None)
+    if (
+        payload.get("wake_oww_enabled")
         and payload.get("oww_wake_word") == "custom_url"
         and payload.get("oww_wake_word_url")
     ):
         # Echo firmware treats one validated trainer bundle as the authority
-        # for both detectors in Dual mode.
+        # for OWW-only and Dual modes.
         payload["oww_wake_word"] = "paired_bundle"
     return payload

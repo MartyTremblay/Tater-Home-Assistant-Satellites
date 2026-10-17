@@ -1084,7 +1084,7 @@ class TaterSatellitePanel extends HTMLElement {
       <div class="editor-head">
         <div>
           <h2>Shared Satellite Voice Settings</h2>
-          <div class="muted">One wake profile is shared by every satellite. MWW runs on all supported firmware; Dual adds matching openWakeWord confirmation on capable Echo firmware while ESP satellites use the bundle's MWW half.</div>
+          <div class="muted">One wake profile is shared by every satellite. Choose microWakeWord Only, OWW Where Supported, or Dual Wake Word. ESP and other MWW-only satellites always use the profile's matching MWW model.</div>
         </div>
       </div>
       ${this.renderSharedWakeEditor(this._wakeDraft || {})}

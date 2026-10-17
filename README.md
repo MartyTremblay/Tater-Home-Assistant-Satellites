@@ -57,9 +57,9 @@ integration from **Devices & services**.
 - Native Home Assistant Bluetooth proxying through compatible Echo satellites,
   including active GATT connections and six-digit PIN pairing without storing
   the PIN
-- One shared wake profile with microWakeWord or matched Dual Wake Word mode;
-  ESP firmware receives the MWW model while capable Echo firmware also runs
-  its matching openWakeWord detector
+- One shared wake profile with microWakeWord Only, OWW Where Supported, or
+  matched Dual Wake Word mode; ESP firmware always receives the MWW model while
+  OWW-capable firmware follows the selected detector policy
 - Shared voice defaults and per-satellite settings for sensitivity, wake sounds,
   trainer captures, conversation behavior, AEC, microphone mute, voice-state
   LEDs, music-reactive ring animations on supported Echo and ESP satellites, S3
@@ -172,20 +172,22 @@ either satellite disconnects.
 ## Configure wake words
 
 Open **Tater Satellites -> Voice Defaults**. The bridge keeps one wake profile
-for every connected satellite. Choose one of two modes:
+for every connected satellite. Choose one of three modes:
 
-- **microWakeWord** uses the same MWW selection on every satellite. Choose
+- **microWakeWord Only** uses the same MWW selection on every satellite. Choose
   built-in Hey Tater, a catalog model, an uploaded model, or a custom package
   URL.
+- **OWW Where Supported** uses openWakeWord alone on capable satellites. ESP32
+  and other MWW-only satellites automatically use the matching microWakeWord
+  half of the same profile.
 - **Dual Wake Word** requires matching MWW and OWW detections before a capable
   Echo opens the microphone. ESP and other MWW-only firmware use the MWW half
   of that same profile.
 
-For a custom Dual wake word, select a `.wake-bundle.json` produced by a
-Tater Wake Word Trainer. Home Assistant validates the bundle and derives both
-matching models from that one selection, so MWW and OWW cannot accidentally be
-configured for different phrases. Existing standalone OWW settings migrate to
-Dual mode; OWW is no longer exposed as a separate mode.
+For custom OWW or Dual wake detection, select a `.wake-bundle.json` produced by
+a Tater Wake Word Trainer. Home Assistant validates the bundle and derives both
+matching models from that one selection, so OWW-capable and MWW-only satellites
+cannot accidentally be configured for different phrases.
 
 ## Choose a catalog microWakeWord
 
