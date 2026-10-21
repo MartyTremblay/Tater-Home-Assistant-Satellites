@@ -150,7 +150,7 @@ class WakeFamilySettingsTests(unittest.TestCase):
         self.assertNotIn("oww_wake_word", mww_only)
         self.assertEqual(mww_only["wake_word_url"], "https://example.test/hey.json")
 
-    def test_schema_presents_all_three_shared_wake_choices(self) -> None:
+    def test_schema_presents_all_five_shared_wake_choices(self) -> None:
         wake = next(
             section
             for section in settings.SETTINGS_SCHEMA
@@ -171,19 +171,26 @@ class WakeFamilySettingsTests(unittest.TestCase):
             fields["wake_detector_mode"]["label"], "Wake detection mode"
         )
         self.assertEqual(fields["wake_word"]["detector_modes"], ["mww"])
-        self.assertEqual(fields["oww_wake_word"]["label"], "Wake word model")
+        self.assertEqual(fields["oww_wake_word"]["label"], "Wake word bundle")
         self.assertEqual(fields["oww_wake_word"]["wake_families"], ["echo"])
         self.assertEqual(
-            fields["oww_wake_word"]["detector_modes"], ["oww", "dual"]
+            fields["oww_wake_word"]["detector_modes"],
+            ["oww", "nww", "mww_oww", "mww_nww"],
         )
         self.assertEqual(
             fields["wake_detector_mode"]["options"],
             [
-                {"value": "mww", "label": "microWakeWord Only"},
-                {"value": "oww", "label": "OWW Where Supported"},
-                {"value": "dual", "label": "Dual Wake Word"},
+                {"value": "mww", "label": "MWW", "group": "single"},
+                {"value": "oww", "label": "OWW", "group": "single"},
+                {"value": "nww", "label": "NWW", "group": "single"},
+                {"value": "mww_oww", "label": "MWW + OWW", "group": "dual"},
+                {"value": "mww_nww", "label": "MWW + NWW", "group": "dual"},
             ],
         )
+        self.assertEqual(fields["nww_architecture"]["detector_modes"], ["nww", "mww_nww"])
+        self.assertEqual(fields["wake_sensitivity"]["scopes"], ["device"])
+        self.assertEqual(fields["wake_environment"]["scopes"], ["device"])
+        self.assertEqual(fields["mww_tuning_override_enabled"]["scopes"], ["wake"])
 
     def test_manager_and_panel_use_one_shared_wake_profile(self) -> None:
         manager = MANAGER_PATH.read_text(encoding="utf-8")
@@ -196,8 +203,8 @@ class WakeFamilySettingsTests(unittest.TestCase):
         self.assertIn("wake_family_for(", manager)
         self.assertIn("async def async_set_shared_wake_settings(", manager)
         self.assertIn("async def async_set_wake_family_settings(", manager)
-        self.assertIn("await self._async_wake_bundle(oww_url)", manager)
-        self.assertIn('if mode in {"oww", "dual"}:', manager)
+        self.assertIn("parse_wake_bundle(", manager)
+        self.assertIn('"nww" if mode in {"nww", "mww_nww"}', manager)
         self.assertNotIn('if mode == "oww":\n            mode = "dual"', manager)
         self.assertIn('families["echo"] = next_settings', manager)
         self.assertIn('families["mww"] = normalize_wake_family_settings(', manager)
@@ -210,7 +217,8 @@ class WakeFamilySettingsTests(unittest.TestCase):
         self.assertIn('"settings/wake"', panel)
         self.assertIn("this._wakeDraft", panel)
         self.assertIn("WAKE_FAMILY_SETTING_KEYS.forEach", panel)
-        self.assertIn("OWW Where Supported", panel)
+        self.assertIn("MWW + NWW", panel)
+        self.assertIn("renderWakeTuningOverrides", panel)
         self.assertGreaterEqual(assist.count('"wake_detector_mode": "mww"'), 3)
 
     def test_oww_only_mode_is_preserved(self) -> None:
@@ -226,6 +234,72 @@ class WakeFamilySettingsTests(unittest.TestCase):
         self.assertEqual(profile["wake_detector_mode"], "oww")
         self.assertFalse(profile["wake_mww_enabled"])
         self.assertTrue(profile["wake_oww_enabled"])
+        self.assertFalse(profile["wake_nww_enabled"])
+
+    def test_nww_modes_project_selected_architecture_and_fallback_to_mww(self) -> None:
+        profile = settings.normalize_wake_family_settings(
+            "echo",
+            {
+                "wake_detector_mode": "mww_nww",
+                "wake_word": "custom_url",
+                "wake_word_url": "https://example.test/hey.esphome.json",
+                "oww_wake_word": "custom_url",
+                "oww_wake_word_url": "https://example.test/hey.wake-bundle.json",
+                "nww_model_revision": "c" * 64,
+                "nww_architecture": "gru",
+                "nww_gru_profile_threshold": 0.93,
+                "nww_gru_profile_patience": 2,
+            },
+        )
+        capable = settings.firmware_payload(
+            profile,
+            board="biscuit",
+            capabilities={"nanowakeword": True},
+        )
+        old_firmware = settings.firmware_payload(
+            profile,
+            board="biscuit",
+            capabilities={"openwakeword": True},
+        )
+
+        self.assertTrue(capable["wake_mww_enabled"])
+        self.assertTrue(capable["wake_nww_enabled"])
+        self.assertFalse(capable["wake_oww_enabled"])
+        self.assertEqual(capable["nww_architecture"], "gru")
+        self.assertEqual(capable["nww_threshold"], 0.93)
+        self.assertEqual(capable["nww_patience"], 2)
+        self.assertEqual(
+            capable["nww_wake_word_url"],
+            "https://example.test/hey.wake-bundle.json",
+        )
+        self.assertTrue(old_firmware["wake_mww_enabled"])
+        self.assertNotIn("wake_nww_enabled", old_firmware)
+
+    def test_model_tuning_is_shared_but_room_profile_remains_per_device(self) -> None:
+        global_values = settings.normalize_settings({})
+        family = settings.normalize_wake_family_settings(
+            "echo",
+            {
+                "wake_detector_mode": "mww_oww",
+                "mww_tuning_override_enabled": True,
+                "mww_threshold_override": 0.91,
+            },
+        )
+        merged = settings.merged_settings(
+            global_values,
+            {
+                "wake_detector_mode": "nww",
+                "mww_threshold_override": 0.2,
+                "wake_sensitivity": "high",
+                "wake_environment": "tv_nearby",
+            },
+            family,
+        )
+
+        self.assertEqual(merged["wake_detector_mode"], "mww_oww")
+        self.assertEqual(merged["mww_threshold_override"], 0.91)
+        self.assertEqual(merged["wake_sensitivity"], "high")
+        self.assertEqual(merged["wake_environment"], "tv_nearby")
 
     def test_echo_mww_mode_does_not_send_openwakeword_settings(self) -> None:
         profile = settings.normalize_wake_family_settings(

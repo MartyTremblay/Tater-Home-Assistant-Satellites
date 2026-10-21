@@ -8,9 +8,10 @@ from typing import Any
 
 DEFAULT_SETTINGS: dict[str, Any] = {
     "wake_engine": "micro_wake_word",
-    "wake_detector_mode": "dual",
+    "wake_detector_mode": "mww_oww",
     "wake_mww_enabled": True,
     "wake_oww_enabled": True,
+    "wake_nww_enabled": False,
     "wake_word": "hey_tater",
     "wake_word_url": "",
     "wake_model_revision": "",
@@ -18,10 +19,41 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "oww_wake_word": "hey_tater",
     "oww_wake_word_url": "",
     "oww_model_revision": "",
+    "nww_wake_word": "hey_tater",
+    "nww_wake_word_url": "",
+    "nww_model_revision": "",
+    "nww_architecture": "cnn",
+    "nww_available_architectures": "cnn,gru",
+    "wake_profile_threshold": 0.98,
+    "wake_profile_sliding_window": 5,
+    "wake_profile_close_miss_threshold": 0.81,
+    "oww_profile_threshold": 0.99,
+    "oww_profile_patience": 3,
+    "oww_profile_confirmation_threshold": 0.92,
+    "oww_profile_confirmation_patience": 3,
+    "nww_profile_threshold": 0.99,
+    "nww_profile_patience": 3,
+    "nww_cnn_profile_threshold": 0.99,
+    "nww_cnn_profile_patience": 3,
+    "nww_gru_profile_threshold": 0.99,
+    "nww_gru_profile_patience": 3,
+    "mww_tuning_override_enabled": False,
+    "mww_threshold_override": 0.98,
+    "mww_sliding_window_override": 5,
+    "oww_tuning_override_enabled": False,
+    "oww_threshold_override": 0.99,
+    "oww_patience_override": 3,
+    "nww_tuning_override_enabled": False,
+    "nww_threshold_override": 0.99,
+    "nww_patience_override": 3,
     "wake_sensitivity": "normal",
     "wake_environment": "balanced",
-    "wake_threshold": 0.97,
+    "wake_threshold": 0.98,
     "wake_sliding_window": 5,
+    "oww_threshold": 0.99,
+    "oww_patience": 3,
+    "nww_threshold": 0.99,
+    "nww_patience": 3,
     "wake_verifier_mode": "off",
     "wake_verifier_phrase": "",
     "wake_verifier_phrase_url": "",
@@ -30,7 +62,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "wake_verifier_timeout_ms": 500,
     "capture_wake_audio": False,
     "capture_close_misses": False,
-    "close_miss_threshold": 0.78,
+    "close_miss_threshold": 0.81,
     "trainer_app_url": "http://trainer.local:8789",
     "wake_sound_enabled": False,
     "wake_sound": "no_sound",
@@ -63,16 +95,25 @@ FIRMWARE_SETTING_KEYS = {
     "wake_engine",
     "wake_mww_enabled",
     "wake_oww_enabled",
+    "wake_nww_enabled",
     "wake_word",
     "wake_word_url",
     "wake_model_revision",
     "oww_wake_word",
     "oww_wake_word_url",
     "oww_model_revision",
+    "nww_wake_word",
+    "nww_wake_word_url",
+    "nww_model_revision",
+    "nww_architecture",
     "wake_sensitivity",
     "wake_environment",
     "wake_threshold",
     "wake_sliding_window",
+    "oww_threshold",
+    "oww_patience",
+    "nww_threshold",
+    "nww_patience",
     "wake_verifier_mode",
     "wake_verifier_window_ms",
     "wake_verifier_timeout_ms",
@@ -119,16 +160,18 @@ WAKE_WORD_SOURCE_OPTIONS = [
 
 OWW_WORD_SOURCE_OPTIONS = [
     {"value": "hey_tater", "label": "Hey Tater (built in)"},
+    {"value": "catalog", "label": "Tater Wake Word Catalog"},
     {"value": "custom_url", "label": "Custom Tater wake bundle"},
 ]
 
-WAKE_DETECTOR_MODES = {"mww", "oww", "dual"}
+WAKE_DETECTOR_MODES = {"mww", "oww", "nww", "mww_oww", "mww_nww"}
 WAKE_FAMILIES = {"mww", "echo"}
 WAKE_FAMILY_SETTING_KEYS = {
     "wake_engine",
     "wake_detector_mode",
     "wake_mww_enabled",
     "wake_oww_enabled",
+    "wake_nww_enabled",
     "wake_word",
     "wake_word_url",
     "wake_model_revision",
@@ -136,11 +179,36 @@ WAKE_FAMILY_SETTING_KEYS = {
     "oww_wake_word",
     "oww_wake_word_url",
     "oww_model_revision",
-    "wake_sensitivity",
-    "wake_environment",
-    "wake_threshold",
-    "wake_sliding_window",
+    "nww_wake_word",
+    "nww_wake_word_url",
+    "nww_model_revision",
+    "nww_architecture",
+    "nww_available_architectures",
+    "wake_profile_threshold",
+    "wake_profile_sliding_window",
+    "wake_profile_close_miss_threshold",
+    "oww_profile_threshold",
+    "oww_profile_patience",
+    "oww_profile_confirmation_threshold",
+    "oww_profile_confirmation_patience",
+    "nww_profile_threshold",
+    "nww_profile_patience",
+    "nww_cnn_profile_threshold",
+    "nww_cnn_profile_patience",
+    "nww_gru_profile_threshold",
+    "nww_gru_profile_patience",
+    "mww_tuning_override_enabled",
+    "mww_threshold_override",
+    "mww_sliding_window_override",
+    "oww_tuning_override_enabled",
+    "oww_threshold_override",
+    "oww_patience_override",
+    "nww_tuning_override_enabled",
+    "nww_threshold_override",
+    "nww_patience_override",
 }
+WAKE_DEVICE_SETTING_KEYS = {"wake_sensitivity", "wake_environment"}
+SHARED_WAKE_MODEL_SETTING_KEYS = WAKE_FAMILY_SETTING_KEYS - WAKE_DEVICE_SETTING_KEYS
 
 WAKE_SOUND_OPTIONS = [
     {"value": "no_sound", "label": "No sound"},
@@ -253,6 +321,7 @@ SETTINGS_SCHEMA: list[dict[str, Any]] = [
                 "key": "wake_engine",
                 "label": "Wake engine",
                 "type": "select",
+                "scopes": ["wake"],
                 "options": [
                     {
                         "value": "micro_wake_word",
@@ -266,22 +335,26 @@ SETTINGS_SCHEMA: list[dict[str, Any]] = [
                 "key": "wake_detector_mode",
                 "label": "Wake detection mode",
                 "type": "select",
+                "scopes": ["wake"],
                 "wake_families": ["echo"],
                 "options": [
-                    {"value": "mww", "label": "microWakeWord Only"},
-                    {"value": "oww", "label": "OWW Where Supported"},
-                    {"value": "dual", "label": "Dual Wake Word"},
+                    {"value": "mww", "label": "MWW", "group": "single"},
+                    {"value": "oww", "label": "OWW", "group": "single"},
+                    {"value": "nww", "label": "NWW", "group": "single"},
+                    {"value": "mww_oww", "label": "MWW + OWW", "group": "dual"},
+                    {"value": "mww_nww", "label": "MWW + NWW", "group": "dual"},
                 ],
                 "description": (
-                    "Use microWakeWord on every satellite, openWakeWord on "
-                    "capable satellites with an MWW fallback elsewhere, or "
-                    "require both matching detectors on capable satellites."
+                    "Single modes use one detector on capable satellites. Dual "
+                    "modes require MWW plus its companion. ESP32 and other "
+                    "MWW-only devices always keep the bundle's MWW fallback."
                 ),
             },
             {
                 "key": "wake_word",
                 "label": "Wake word",
                 "type": "select",
+                "scopes": ["wake"],
                 "detector_modes": ["mww"],
                 "options": WAKE_WORD_SOURCE_OPTIONS,
             },
@@ -289,6 +362,7 @@ SETTINGS_SCHEMA: list[dict[str, Any]] = [
                 "key": "wake_word_catalog_url",
                 "label": "Wake Word Catalog",
                 "type": "select",
+                "scopes": ["wake"],
                 "detector_modes": ["mww"],
                 "options": [],
                 "show_when": {"key": "wake_word", "equals": "catalog"},
@@ -301,35 +375,57 @@ SETTINGS_SCHEMA: list[dict[str, Any]] = [
                 "key": "wake_model_asset_id",
                 "label": "Uploaded wake model",
                 "type": "wake_model_asset",
+                "scopes": ["wake"],
                 "detector_modes": ["mww"],
                 "show_when": {"key": "wake_word", "equals": "custom_url"},
             },
             {
                 "key": "wake_word_url",
-                "label": "External wake JSON or TFLite URL",
+                "label": "Wake bundle or MWW JSON URL",
                 "type": "url",
+                "scopes": ["wake"],
                 "detector_modes": ["mww"],
                 "show_when": {"key": "wake_word", "equals": "custom_url"},
-                "placeholder": "https://example.local/wake_word.json",
+                "placeholder": "https://example.local/wake_word.wake-bundle.json",
+                "description": (
+                    "Use the trainer's canonical wake bundle or a simple "
+                    "ESPHome microWakeWord JSON package."
+                ),
             },
             {
                 "key": "oww_wake_word",
-                "label": "Wake word model",
+                "label": "Wake word bundle",
                 "type": "select",
+                "scopes": ["wake"],
                 "wake_families": ["echo"],
-                "detector_modes": ["oww", "dual"],
+                "detector_modes": ["oww", "nww", "mww_oww", "mww_nww"],
                 "options": OWW_WORD_SOURCE_OPTIONS,
                 "description": (
-                    "Choose built-in Hey Tater or a matched wake bundle. The "
-                    "bridge sends the appropriate model to each satellite."
+                    "One bundle supplies matching MWW, OWW, and NWW models. The "
+                    "bridge sends only the models each satellite can run."
+                ),
+            },
+            {
+                "key": "oww_wake_word_catalog_url",
+                "label": "Wake Word Catalog",
+                "type": "select",
+                "scopes": ["wake"],
+                "wake_families": ["echo"],
+                "detector_modes": ["oww", "nww", "mww_oww", "mww_nww"],
+                "options": [],
+                "show_when": {"key": "oww_wake_word", "equals": "catalog"},
+                "description": (
+                    "OWW requires a V7-or-newer bundle. NWW requires a "
+                    "V8-or-newer bundle containing the selected architecture."
                 ),
             },
             {
                 "key": "oww_wake_word_url",
                 "label": "Tater wake-bundle URL",
                 "type": "url",
+                "scopes": ["wake"],
                 "wake_families": ["echo"],
-                "detector_modes": ["oww", "dual"],
+                "detector_modes": ["oww", "nww", "mww_oww", "mww_nww"],
                 "show_when": {"key": "oww_wake_word", "equals": "custom_url"},
                 "placeholder": (
                     "http://trainer.local:8789/api/trained_wake_words/"
@@ -337,10 +433,26 @@ SETTINGS_SCHEMA: list[dict[str, Any]] = [
                 ),
             },
             {
+                "key": "nww_architecture",
+                "label": "NanoWakeWord architecture",
+                "type": "select",
+                "scopes": ["wake"],
+                "wake_families": ["echo"],
+                "detector_modes": ["nww", "mww_nww"],
+                "options": [
+                    {"value": "cnn", "label": "CNN"},
+                    {"value": "gru", "label": "GRU"},
+                ],
+                "description": (
+                    "Architectures not included in the selected bundle stay disabled."
+                ),
+            },
+            {
                 "key": "wake_sensitivity",
                 "label": "Wake sensitivity",
                 "type": "select",
-                "detector_modes": ["mww", "oww", "dual"],
+                "scopes": ["device"],
+                "detector_modes": ["mww", "oww", "nww", "mww_oww", "mww_nww"],
                 "options": [
                     {"value": "conservative", "label": "Conservative"},
                     {"value": "normal", "label": "Normal"},
@@ -351,7 +463,8 @@ SETTINGS_SCHEMA: list[dict[str, Any]] = [
                 "key": "wake_environment",
                 "label": "Wake environment",
                 "type": "select",
-                "detector_modes": ["mww", "oww", "dual"],
+                "scopes": ["device"],
+                "detector_modes": ["mww", "oww", "nww", "mww_oww", "mww_nww"],
                 "options": [
                     {"value": "balanced", "label": "Balanced"},
                     {"value": "tv_nearby", "label": "TV Nearby"},
@@ -360,21 +473,99 @@ SETTINGS_SCHEMA: list[dict[str, Any]] = [
                 ],
             },
             {
-                "key": "wake_threshold",
-                "label": "Base wake threshold",
+                "key": "mww_tuning_override_enabled",
+                "label": "Override MWW bundle tuning",
+                "type": "boolean",
+                "scopes": ["wake"],
+                "detector_modes": ["mww", "mww_oww", "mww_nww"],
+                "override_control": True,
+            },
+            {
+                "key": "mww_threshold_override",
+                "label": "MWW threshold",
                 "type": "number",
-                "detector_modes": ["mww", "dual"],
+                "scopes": ["wake"],
+                "detector_modes": ["mww", "mww_oww", "mww_nww"],
+                "show_when": {"key": "mww_tuning_override_enabled", "equals": True},
+                "override_control": True,
                 "min": 0.01,
                 "max": 0.99,
                 "step": 0.01,
             },
             {
-                "key": "wake_sliding_window",
-                "label": "Sliding window",
+                "key": "mww_sliding_window_override",
+                "label": "MWW sliding window",
                 "type": "number",
-                "detector_modes": ["mww", "dual"],
+                "scopes": ["wake"],
+                "detector_modes": ["mww", "mww_oww", "mww_nww"],
+                "show_when": {"key": "mww_tuning_override_enabled", "equals": True},
+                "override_control": True,
                 "min": 1,
                 "max": 10,
+                "step": 1,
+            },
+            {
+                "key": "oww_tuning_override_enabled",
+                "label": "Override OWW bundle tuning",
+                "type": "boolean",
+                "scopes": ["wake"],
+                "detector_modes": ["oww", "mww_oww"],
+                "override_control": True,
+            },
+            {
+                "key": "oww_threshold_override",
+                "label": "OWW threshold",
+                "type": "number",
+                "scopes": ["wake"],
+                "detector_modes": ["oww", "mww_oww"],
+                "show_when": {"key": "oww_tuning_override_enabled", "equals": True},
+                "override_control": True,
+                "min": 0.01,
+                "max": 1.0,
+                "step": 0.01,
+            },
+            {
+                "key": "oww_patience_override",
+                "label": "OWW patience",
+                "type": "number",
+                "scopes": ["wake"],
+                "detector_modes": ["oww", "mww_oww"],
+                "show_when": {"key": "oww_tuning_override_enabled", "equals": True},
+                "override_control": True,
+                "min": 1,
+                "max": 20,
+                "step": 1,
+            },
+            {
+                "key": "nww_tuning_override_enabled",
+                "label": "Override NWW bundle tuning",
+                "type": "boolean",
+                "scopes": ["wake"],
+                "detector_modes": ["nww", "mww_nww"],
+                "override_control": True,
+            },
+            {
+                "key": "nww_threshold_override",
+                "label": "NWW threshold",
+                "type": "number",
+                "scopes": ["wake"],
+                "detector_modes": ["nww", "mww_nww"],
+                "show_when": {"key": "nww_tuning_override_enabled", "equals": True},
+                "override_control": True,
+                "min": 0.01,
+                "max": 1.0,
+                "step": 0.01,
+            },
+            {
+                "key": "nww_patience_override",
+                "label": "NWW patience",
+                "type": "number",
+                "scopes": ["wake"],
+                "detector_modes": ["nww", "mww_nww"],
+                "show_when": {"key": "nww_tuning_override_enabled", "equals": True},
+                "override_control": True,
+                "min": 1,
+                "max": 20,
                 "step": 1,
             },
         ],
@@ -682,7 +873,9 @@ _ALLOWED = {
     "wake_engine": {"micro_wake_word", "button", "off"},
     "wake_detector_mode": WAKE_DETECTOR_MODES,
     "wake_word": {row["value"] for row in WAKE_WORD_OPTIONS},
-    "oww_wake_word": {row["value"] for row in OWW_WORD_SOURCE_OPTIONS},
+    "oww_wake_word": {"hey_tater", "custom_url"},
+    "nww_wake_word": {"hey_tater", "custom_url"},
+    "nww_architecture": {"cnn", "gru"},
     "wake_sensitivity": {"conservative", "normal", "high"},
     "wake_environment": {"balanced", "tv_nearby", "strict", "far_field"},
     "wake_verifier_mode": {"off", "observe", "enforce"},
@@ -702,6 +895,10 @@ _ALLOWED = {
 _BOOL_KEYS = {
     "wake_mww_enabled",
     "wake_oww_enabled",
+    "wake_nww_enabled",
+    "mww_tuning_override_enabled",
+    "oww_tuning_override_enabled",
+    "nww_tuning_override_enabled",
     "capture_wake_audio",
     "capture_close_misses",
     "wake_sound_enabled",
@@ -713,6 +910,17 @@ _BOOL_KEYS = {
 }
 _INT_RANGES = {
     "wake_sliding_window": (1, 10),
+    "wake_profile_sliding_window": (1, 10),
+    "mww_sliding_window_override": (1, 10),
+    "oww_profile_patience": (1, 20),
+    "oww_profile_confirmation_patience": (1, 20),
+    "nww_profile_patience": (1, 20),
+    "nww_cnn_profile_patience": (1, 20),
+    "nww_gru_profile_patience": (1, 20),
+    "oww_patience_override": (1, 20),
+    "nww_patience_override": (1, 20),
+    "oww_patience": (1, 20),
+    "nww_patience": (1, 20),
     "wake_verifier_window_ms": (500, 2000),
     "wake_verifier_timeout_ms": (100, 2000),
     "aec_strength_percent": (0, 100),
@@ -724,6 +932,18 @@ _INT_RANGES = {
 }
 _FLOAT_RANGES = {
     "wake_threshold": (0.01, 0.99),
+    "wake_profile_threshold": (0.01, 0.99),
+    "wake_profile_close_miss_threshold": (0.01, 0.99),
+    "mww_threshold_override": (0.01, 0.99),
+    "oww_profile_threshold": (0.01, 1.0),
+    "oww_profile_confirmation_threshold": (0.01, 1.0),
+    "nww_profile_threshold": (0.01, 1.0),
+    "nww_cnn_profile_threshold": (0.01, 1.0),
+    "nww_gru_profile_threshold": (0.01, 1.0),
+    "oww_threshold_override": (0.01, 1.0),
+    "nww_threshold_override": (0.01, 1.0),
+    "oww_threshold": (0.01, 1.0),
+    "nww_threshold": (0.01, 1.0),
     "wake_verifier_threshold": (0.5, 1.0),
     "close_miss_threshold": (0.01, 0.99),
 }
@@ -733,6 +953,9 @@ _TEXT_LIMITS = {
     "wake_model_asset_id": 128,
     "oww_wake_word_url": 255,
     "oww_model_revision": 64,
+    "nww_wake_word_url": 255,
+    "nww_model_revision": 64,
+    "nww_available_architectures": 32,
     "wake_verifier_phrase": 120,
     "wake_verifier_phrase_url": 255,
     "trainer_app_url": 127,
@@ -919,17 +1142,23 @@ def normalize_settings(
         if result.get("oww_wake_word") != "custom_url":
             result["oww_wake_word_url"] = ""
             result["oww_model_revision"] = ""
+            result["nww_model_revision"] = ""
+        if result.get("nww_wake_word") != "custom_url":
+            result["nww_wake_word_url"] = ""
         if result.get("wake_sound") != "custom":
             result["wake_sound_url"] = ""
             result["wake_sound_asset_id"] = ""
 
     if "wake_detector_mode" in result or not partial:
-        mode = str(result.get("wake_detector_mode") or "dual")
+        mode = str(result.get("wake_detector_mode") or "mww_oww")
+        if mode == "dual":
+            mode = "mww_oww"
         if mode not in WAKE_DETECTOR_MODES:
-            mode = "dual"
+            mode = "mww_oww"
         result["wake_detector_mode"] = mode
-        result["wake_mww_enabled"] = mode in {"mww", "dual"}
-        result["wake_oww_enabled"] = mode in {"oww", "dual"}
+        result["wake_mww_enabled"] = mode in {"mww", "mww_oww", "mww_nww"}
+        result["wake_oww_enabled"] = mode in {"oww", "mww_oww"}
+        result["wake_nww_enabled"] = mode in {"nww", "mww_nww"}
 
     return result
 
@@ -941,11 +1170,20 @@ def wake_family_for(
     caps = capabilities if isinstance(capabilities, dict) else {}
     if any(
         _boolean(caps.get(key), False)
-        for key in ("openwakeword", "wake_detector_selection", "dual_wake_confirmation")
+        for key in (
+            "openwakeword",
+            "nanowakeword",
+            "wake_detector_selection",
+            "dual_wake_confirmation",
+        )
     ):
         return "echo"
     token = str(board or "").strip().lower().replace("_", "-")
-    return "echo" if token in {"biscuit", "checkers", "rook"} else "mww"
+    return (
+        "echo"
+        if token in {"biscuit", "radar", "checkers", "crown", "rook"}
+        else "mww"
+    )
 
 
 def normalize_wake_family_settings(
@@ -967,13 +1205,16 @@ def normalize_wake_family_settings(
     mode = (
         "mww"
         if token == "mww"
-        else str(current.get("wake_detector_mode") or "dual")
+        else str(current.get("wake_detector_mode") or "mww_oww")
     )
+    if mode == "dual":
+        mode = "mww_oww"
     if mode not in WAKE_DETECTOR_MODES:
-        mode = "dual"
+        mode = "mww_oww"
     current["wake_detector_mode"] = mode
-    current["wake_mww_enabled"] = mode in {"mww", "dual"}
-    current["wake_oww_enabled"] = mode in {"oww", "dual"}
+    current["wake_mww_enabled"] = mode in {"mww", "mww_oww", "mww_nww"}
+    current["wake_oww_enabled"] = mode in {"oww", "mww_oww"}
+    current["wake_nww_enabled"] = mode in {"nww", "mww_nww"}
     return {key: current[key] for key in WAKE_FAMILY_SETTING_KEYS if key in current}
 
 
@@ -990,7 +1231,15 @@ def merged_settings(
         partial=True,
     )
     base_values = normalize_settings({**global_values, **family_values})
-    override_values = normalize_settings(overrides, base=base_values, partial=True)
+    override_values = normalize_settings(
+        {
+            key: value
+            for key, value in (overrides or {}).items()
+            if key not in SHARED_WAKE_MODEL_SETTING_KEYS
+        },
+        base=base_values,
+        partial=True,
+    )
     return normalize_settings({**base_values, **override_values})
 
 
@@ -1025,36 +1274,157 @@ def firmware_payload(
         payload.pop("led_music_animation", None)
     if not board_supports_audio_output_settings(board):
         payload.pop("audio_output_mode", None)
-    base_threshold = float(normalized["wake_threshold"])
+    profile_threshold = float(normalized["wake_profile_threshold"])
     adjustment = WAKE_SENSITIVITY_ADJUSTMENTS.get(
         str(normalized["wake_sensitivity"]), 0.0
     )
     payload["wake_threshold"] = round(
-        max(0.01, min(0.99, base_threshold + adjustment)), 3
+        float(normalized["mww_threshold_override"])
+        if normalized["mww_tuning_override_enabled"]
+        else max(0.01, min(0.99, profile_threshold + adjustment)),
+        3,
     )
+    payload["wake_sliding_window"] = (
+        int(normalized["mww_sliding_window_override"])
+        if normalized["mww_tuning_override_enabled"]
+        else int(normalized["wake_profile_sliding_window"])
+    )
+    payload["close_miss_threshold"] = float(
+        normalized["wake_profile_close_miss_threshold"]
+    )
+
+    mode = str(normalized.get("wake_detector_mode") or "mww_oww")
+    if mode == "dual":
+        mode = "mww_oww"
+    oww_confirmation = mode == "mww_oww"
+    oww_profile_threshold = float(
+        normalized[
+            "oww_profile_confirmation_threshold"
+            if oww_confirmation
+            else "oww_profile_threshold"
+        ]
+    )
+    oww_profile_patience = int(
+        normalized[
+            "oww_profile_confirmation_patience"
+            if oww_confirmation
+            else "oww_profile_patience"
+        ]
+    )
+    payload["oww_threshold"] = round(
+        float(normalized["oww_threshold_override"])
+        if normalized["oww_tuning_override_enabled"]
+        else oww_profile_threshold,
+        3,
+    )
+    payload["oww_patience"] = (
+        int(normalized["oww_patience_override"])
+        if normalized["oww_tuning_override_enabled"]
+        else oww_profile_patience
+    )
+
+    architecture = str(normalized.get("nww_architecture") or "cnn")
+    architecture = architecture if architecture in {"cnn", "gru"} else "cnn"
+    nww_prefix = "nww_gru" if architecture == "gru" else "nww_cnn"
+    payload["nww_threshold"] = round(
+        float(normalized["nww_threshold_override"])
+        if normalized["nww_tuning_override_enabled"]
+        else float(normalized[f"{nww_prefix}_profile_threshold"]),
+        3,
+    )
+    payload["nww_patience"] = (
+        int(normalized["nww_patience_override"])
+        if normalized["nww_tuning_override_enabled"]
+        else int(normalized[f"{nww_prefix}_profile_patience"])
+    )
+    payload["nww_architecture"] = architecture
+
     family = wake_family_for(capabilities=capabilities, board=board)
-    if family == "mww":
+    caps = capabilities if isinstance(capabilities, dict) else {}
+    supports_oww = any(
+        _boolean(caps.get(key), False)
+        for key in ("openwakeword", "wake_detector_selection", "dual_wake_confirmation")
+    )
+    supports_nww = _boolean(caps.get("nanowakeword"), False)
+    if family == "mww" or (mode in {"oww", "mww_oww"} and not supports_oww) or (
+        mode in {"nww", "mww_nww"} and not supports_nww
+    ):
+        mode = "mww"
         payload["wake_mww_enabled"] = True
         for key in (
             "wake_oww_enabled",
+            "wake_nww_enabled",
             "oww_wake_word",
             "oww_wake_word_url",
             "oww_model_revision",
+            "oww_threshold",
+            "oww_patience",
+            "nww_wake_word",
+            "nww_wake_word_url",
+            "nww_model_revision",
+            "nww_architecture",
+            "nww_threshold",
+            "nww_patience",
         ):
             payload.pop(key, None)
     else:
-        mode = str(normalized.get("wake_detector_mode") or "dual")
-        payload["wake_mww_enabled"] = mode in {"mww", "dual"}
-        payload["wake_oww_enabled"] = mode in {"oww", "dual"}
+        payload["wake_mww_enabled"] = mode in {"mww", "mww_oww", "mww_nww"}
+        payload["wake_oww_enabled"] = mode in {"oww", "mww_oww"}
+        payload["wake_nww_enabled"] = mode in {"nww", "mww_nww"}
         if mode == "mww":
-            for key in ("oww_wake_word", "oww_wake_word_url", "oww_model_revision"):
+            for key in (
+                "oww_wake_word",
+                "oww_wake_word_url",
+                "oww_model_revision",
+                "oww_threshold",
+                "oww_patience",
+                "nww_wake_word",
+                "nww_wake_word_url",
+                "nww_model_revision",
+                "nww_architecture",
+                "nww_threshold",
+                "nww_patience",
+            ):
                 payload.pop(key, None)
+        elif mode in {"oww", "mww_oww"}:
+            for key in (
+                "nww_wake_word",
+                "nww_wake_word_url",
+                "nww_model_revision",
+                "nww_architecture",
+                "nww_threshold",
+                "nww_patience",
+            ):
+                payload.pop(key, None)
+            if mode == "oww":
+                for key in ("wake_word", "wake_word_url", "wake_model_revision"):
+                    payload.pop(key, None)
+        else:
+            companion_source = str(normalized.get("oww_wake_word") or "hey_tater")
+            payload["nww_wake_word"] = companion_source
+            payload["nww_wake_word_url"] = str(
+                normalized.get("oww_wake_word_url") or ""
+            )
+            payload["nww_model_revision"] = str(
+                normalized.get("nww_model_revision") or ""
+            )
+            for key in (
+                "oww_wake_word",
+                "oww_wake_word_url",
+                "oww_model_revision",
+                "oww_threshold",
+                "oww_patience",
+            ):
+                payload.pop(key, None)
+            if mode == "nww":
+                for key in ("wake_word", "wake_word_url", "wake_model_revision"):
+                    payload.pop(key, None)
     if (
         payload.get("wake_oww_enabled")
         and payload.get("oww_wake_word") == "custom_url"
         and payload.get("oww_wake_word_url")
     ):
-        # Echo firmware treats one validated trainer bundle as the authority
-        # for OWW-only and Dual modes.
+        # Echo firmware treats one validated wake bundle as the authority for
+        # the OWW half of both single and MWW+OWW modes.
         payload["oww_wake_word"] = "paired_bundle"
     return payload

@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.0.0
+
+- Added NanoWakeWord CNN and GRU support with MWW, OWW, NWW, MWW + OWW, and
+  MWW + NWW wake policies. Satellites without the selected companion engine
+  automatically keep the matching MWW fallback.
+- Added canonical schema-v3 wake-bundle support while preserving schema-v1 and
+  schema-v2 MWW/OWW packages. The bridge now applies each bundle's MWW, OWW,
+  and NWW calibration values and validates the selected NWW architecture.
+- Added model-specific shared tuning cards and kept room sensitivity and
+  environment in the per-satellite settings. Stale per-device model overrides
+  are removed during migration.
+- Expanded the official catalog selector to use OWW bundles from V7 onward and
+  NWW bundles from V8 onward.
+
 ## 0.9.2
 
 - Added **OWW Where Supported** to the shared wake-detection setting. Capable

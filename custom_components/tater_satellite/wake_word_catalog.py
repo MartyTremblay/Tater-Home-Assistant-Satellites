@@ -50,11 +50,18 @@ def is_catalog_url(value: Any) -> bool:
     )
 
 
-def require_catalog_url(value: Any) -> str:
+def require_catalog_url(value: Any, *, minimum_version: int = 1) -> str:
     """Return a validated official catalog URL."""
     token = _text(value)
     if not is_catalog_url(token):
         raise ValueError("Select a wake word from the official Tater catalog.")
+    match = re.search(r"/microWakeWordsV([0-9]+)/", urlparse(token).path, re.I)
+    version = int(match.group(1)) if match else 0
+    if version < minimum_version:
+        raise ValueError(
+            f"This wake engine requires a V{minimum_version}-or-newer "
+            "Tater wake bundle."
+        )
     return token
 
 
@@ -70,6 +77,21 @@ def resolve_wake_word_source_values(values: dict[str, Any]) -> dict[str, Any]:
         )
         resolved["wake_model_asset_id"] = ""
     resolved.pop("wake_word_catalog_url", None)
+    companion_source = _text(resolved.get("oww_wake_word")).lower().replace(
+        "-", "_"
+    )
+    companion_catalog_present = "oww_wake_word_catalog_url" in resolved
+    if companion_source == "catalog" or (
+        not companion_source and companion_catalog_present
+    ):
+        mode = _text(resolved.get("wake_detector_mode")).lower()
+        minimum_version = 8 if mode in {"nww", "mww_nww"} else 7
+        resolved["oww_wake_word"] = "custom_url"
+        resolved["oww_wake_word_url"] = require_catalog_url(
+            resolved.get("oww_wake_word_catalog_url"),
+            minimum_version=minimum_version,
+        )
+    resolved.pop("oww_wake_word_catalog_url", None)
     return resolved
 
 
@@ -117,6 +139,23 @@ def entries_from_manifest(payload: Any) -> list[dict[str, Any]]:
         ) or _raw_url(row.get("path"))
         if not is_catalog_url(url):
             continue
+        bundle_url = _text(row.get("bundle_url")) or _raw_url(
+            row.get("bundle_path")
+        )
+        if not is_catalog_url(bundle_url):
+            bundle_url = ""
+        raw_engines = row.get("available_engines")
+        engines = {
+            _text(value).lower().replace("-", "_")
+            for value in raw_engines
+        } if isinstance(raw_engines, list) else set()
+        if row.get("dual_model") or row.get("open_wake_word"):
+            engines.add("open_wake_word")
+        architectures = row.get("nanowakeword_architectures")
+        if isinstance(architectures, list) and architectures:
+            engines.add("nano_wake_word")
+        if row.get("nano_model"):
+            engines.add("nano_wake_word")
         slug = _text(row.get("slug") or row.get("name") or row.get("key"))
         label = _text(row.get("label") or row.get("title"))
         if not label:
@@ -127,6 +166,15 @@ def entries_from_manifest(payload: Any) -> list[dict[str, Any]]:
             "slug": slug,
             "label": label,
             "url": url,
+            "bundle_url": bundle_url,
+            "available_engines": sorted(engines),
+            "nanowakeword_architectures": sorted(
+                {
+                    _text(value).lower()
+                    for value in (architectures or [])
+                    if _text(value).lower() in {"cnn", "gru"}
+                }
+            ),
             "source": source,
             "version": version,
             "version_label": version_label,
@@ -153,7 +201,7 @@ class WakeWordCatalog:
         self.last_error = ""
 
     async def _async_fetch(self) -> list[dict[str, Any]]:
-        async with asyncio.timeout(_REMOTE_TIMEOUT_SECONDS):
+        async def _read_manifest() -> bytearray:
             async with self._session.get(
                 CATALOG_MANIFEST_URL,
                 headers={"Accept": "application/json"},
@@ -167,6 +215,12 @@ class WakeWordCatalog:
                     if not chunk:
                         break
                     raw.extend(chunk)
+            return raw
+
+        raw = await asyncio.wait_for(
+            _read_manifest(),
+            timeout=_REMOTE_TIMEOUT_SECONDS,
+        )
         if len(raw) > _MAX_MANIFEST_BYTES:
             raise ValueError("Wake word catalog manifest is too large.")
         entries = entries_from_manifest(json.loads(raw.decode("utf-8")))
@@ -214,6 +268,36 @@ class WakeWordCatalog:
                 if int(row.get("version") or 0) < 999
             }
         )
+        oww_rows = [
+            row
+            for row in self._entries
+            if int(row.get("version") or 0) >= 7
+            and _text(row.get("bundle_url"))
+            and "open_wake_word" in set(row.get("available_engines") or [])
+        ]
+        nww_rows = [
+            row
+            for row in self._entries
+            if int(row.get("version") or 0) >= 8
+            and _text(row.get("bundle_url"))
+            and "nano_wake_word" in set(row.get("available_engines") or [])
+        ]
+
+        def _bundle_options(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+            return [
+                {
+                    "value": _text(row.get("bundle_url")),
+                    "label": (
+                        f"{_text(row.get('label'))} "
+                        f"[{_text(row.get('version_label'))}]"
+                    ),
+                    "architectures": list(
+                        row.get("nanowakeword_architectures") or []
+                    ),
+                }
+                for row in rows
+            ]
+
         return {
             "options": [
                 {
@@ -226,6 +310,8 @@ class WakeWordCatalog:
                 for row in self._entries
                 if _text(row.get("url"))
             ],
+            "oww_options": _bundle_options(oww_rows),
+            "nww_options": _bundle_options(nww_rows),
             "count": len(self._entries),
             "versions": versions,
             "warning": self.last_error,

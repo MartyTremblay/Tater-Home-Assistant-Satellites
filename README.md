@@ -57,9 +57,8 @@ integration from **Devices & services**.
 - Native Home Assistant Bluetooth proxying through compatible Echo satellites,
   including active GATT connections and six-digit PIN pairing without storing
   the PIN
-- One shared wake profile with microWakeWord Only, OWW Where Supported, or
-  matched Dual Wake Word mode; ESP firmware always receives the MWW model while
-  OWW-capable firmware follows the selected detector policy
+- One shared wake profile with MWW, OWW, NWW, MWW + OWW, and MWW + NWW modes;
+  ESP32 and older firmware safely receive the matching MWW fallback
 - Shared voice defaults and per-satellite settings for sensitivity, wake sounds,
   trainer captures, conversation behavior, AEC, microphone mute, voice-state
   LEDs, music-reactive ring animations on supported Echo and ESP satellites, S3
@@ -68,10 +67,10 @@ integration from **Devices & services**.
   Assistant number entity
 - Satellite1 output routing with automatic jack detection plus Internal, AUX,
   and simultaneous Internal + AUX modes
-- Official Tater Wake Word Catalog selection with versioned microWakeWord
-  models shared with the main Tater app
-- Custom microWakeWord TFLite uploads, trainer-produced MWW/OWW wake bundles,
-  and custom WAV wake sounds
+- Official Tater Wake Word Catalog selection with all MWW generations, OWW
+  bundles from V7 onward, and NWW bundles from V8 onward
+- Custom microWakeWord TFLite uploads, schema-v1 and schema-v3 trainer wake
+  bundles, NanoWakeWord CNN/GRU selection, and custom WAV wake sounds
 - Secure Wake Word Trainer pairing and automatic wake-word publishing
 - Board-aware OTA updates and browser USB recovery for Voice PE, Satellite1,
   Satellite1 Beta.1/rev4.1, ReSpeaker XVF3800, and ESP32-S3-BOX-3
@@ -172,30 +171,38 @@ either satellite disconnects.
 ## Configure wake words
 
 Open **Tater Satellites -> Voice Defaults**. The bridge keeps one wake profile
-for every connected satellite. Choose one of three modes:
+for every connected satellite. Choose a single-model or dual-model policy:
 
-- **microWakeWord Only** uses the same MWW selection on every satellite. Choose
+- **MWW** uses the same microWakeWord selection on every satellite. Choose
   built-in Hey Tater, a catalog model, an uploaded model, or a custom package
   URL.
-- **OWW Where Supported** uses openWakeWord alone on capable satellites. ESP32
+- **OWW** uses openWakeWord alone on capable satellites. ESP32
   and other MWW-only satellites automatically use the matching microWakeWord
   half of the same profile.
-- **Dual Wake Word** requires matching MWW and OWW detections before a capable
-  Echo opens the microphone. ESP and other MWW-only firmware use the MWW half
-  of that same profile.
+- **NWW** uses a selected NanoWakeWord CNN or GRU model on capable satellites,
+  with the matching MWW fallback everywhere else.
+- **MWW + OWW** and **MWW + NWW** require both selected detectors to agree
+  before a capable satellite opens the microphone. MWW-only firmware keeps the
+  matching MWW half.
 
-For custom OWW or Dual wake detection, select a `.wake-bundle.json` produced by
-a Tater Wake Word Trainer. Home Assistant validates the bundle and derives both
-matching models from that one selection, so OWW-capable and MWW-only satellites
-cannot accidentally be configured for different phrases.
+For custom companion or dual detection, select the canonical
+`.wake-bundle.json` produced by a Tater Wake Word Trainer. Home Assistant
+supports schema-v1 through schema-v3 bundles, including the new bundles that
+can contain MWW, OWW, NWW CNN, and NWW GRU together. The bridge validates the
+selected engine, reads the trainer-tested threshold/window/patience values, and
+sends only the models each satellite can run.
+
+Model-specific override cards appear for the engines active in the selected
+policy. With an override disabled, the trainer bundle values remain in effect.
+Wake sensitivity and environment—including **TV Nearby**—remain per-satellite
+room settings.
 
 ## Choose a catalog microWakeWord
 
-While using microWakeWord mode, set **Wake word** to **Tater Wake Word
-Catalog**, and choose any versioned model from the official catalog. Home
-Assistant validates that the selected JSON package belongs to the Tater
-catalog, sends its URL through the existing custom-model firmware path, and
-reads the manifest phrase for STT wake verification.
+While using MWW, set **Wake word** to **Tater Wake Word Catalog** and choose any
+versioned model. Companion modes offer only compatible bundles: OWW starts at
+V7 and NWW starts at V8. Home Assistant validates that the selected package
+belongs to the official catalog before sending it to satellites.
 
 The catalog is fetched asynchronously and cached for ten minutes. If a refresh
 temporarily fails, the bridge keeps the last successfully loaded list. You can

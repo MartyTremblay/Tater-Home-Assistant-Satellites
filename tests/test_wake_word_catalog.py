@@ -37,6 +37,22 @@ V6_URL = (
     "https://raw.githubusercontent.com/TaterTotterson/"
     "Tater-Wake-Words/main/microWakeWordsV6/hey_tater.json"
 )
+V7_URL = (
+    "https://raw.githubusercontent.com/TaterTotterson/"
+    "Tater-Wake-Words/main/microWakeWordsV7/hey_tater.esphome.json"
+)
+V7_BUNDLE_URL = (
+    "https://raw.githubusercontent.com/TaterTotterson/"
+    "Tater-Wake-Words/main/microWakeWordsV7/hey_tater.wake-bundle.json"
+)
+V8_URL = (
+    "https://raw.githubusercontent.com/TaterTotterson/"
+    "Tater-Wake-Words/main/microWakeWordsV8/hey_tater.esphome.json"
+)
+V8_BUNDLE_URL = (
+    "https://raw.githubusercontent.com/TaterTotterson/"
+    "Tater-Wake-Words/main/microWakeWordsV8/hey_tater.wake-bundle.json"
+)
 
 
 class _FakeContent:
@@ -144,6 +160,82 @@ class WakeWordCatalogTests(unittest.TestCase):
 
         self.assertEqual(resolved["wake_word"], "custom_url")
         self.assertEqual(resolved["wake_word_url"], V1_URL)
+
+    def test_companion_catalog_enforces_oww_v7_and_nww_v8(self) -> None:
+        oww = catalog.resolve_wake_word_source_values(
+            {
+                "wake_detector_mode": "mww_oww",
+                "oww_wake_word": "catalog",
+                "oww_wake_word_catalog_url": V7_BUNDLE_URL,
+            }
+        )
+        nww = catalog.resolve_wake_word_source_values(
+            {
+                "wake_detector_mode": "mww_nww",
+                "oww_wake_word": "catalog",
+                "oww_wake_word_catalog_url": V8_BUNDLE_URL,
+            }
+        )
+
+        self.assertEqual(oww["oww_wake_word"], "custom_url")
+        self.assertEqual(oww["oww_wake_word_url"], V7_BUNDLE_URL)
+        self.assertEqual(nww["oww_wake_word_url"], V8_BUNDLE_URL)
+        with self.assertRaisesRegex(ValueError, "V8-or-newer"):
+            catalog.resolve_wake_word_source_values(
+                {
+                    "wake_detector_mode": "nww",
+                    "oww_wake_word": "catalog",
+                    "oww_wake_word_catalog_url": V7_BUNDLE_URL,
+                }
+            )
+
+    def test_catalog_snapshot_splits_oww_and_nww_bundle_generations(self) -> None:
+        entries = catalog.entries_from_manifest(
+            {
+                "entries": [
+                    {
+                        "source": "microWakeWordsV7",
+                        "slug": "hey_tater",
+                        "label": "Hey Tater",
+                        "url": V7_URL,
+                        "bundle_url": V7_BUNDLE_URL,
+                        "dual_model": True,
+                    },
+                    {
+                        "source": "microWakeWordsV8",
+                        "slug": "hey_tater",
+                        "label": "Hey Tater",
+                        "url": V8_URL,
+                        "bundle_url": V8_BUNDLE_URL,
+                        "available_engines": [
+                            "micro_wake_word",
+                            "open_wake_word",
+                            "nano_wake_word",
+                        ],
+                        "nanowakeword_architectures": ["cnn", "gru"],
+                    },
+                ]
+            }
+        )
+        coordinator = catalog.WakeWordCatalog.__new__(catalog.WakeWordCatalog)
+        coordinator._entries = entries
+        coordinator.last_error = ""
+        snapshot = coordinator.snapshot()
+
+        self.assertEqual(
+            [row["value"] for row in snapshot["oww_options"]],
+            [V7_BUNDLE_URL, V8_BUNDLE_URL],
+        )
+        self.assertEqual(
+            snapshot["nww_options"],
+            [
+                {
+                    "value": V8_BUNDLE_URL,
+                    "label": "Hey Tater [V8]",
+                    "architectures": ["cnn", "gru"],
+                }
+            ],
+        )
 
     def test_settings_schema_exposes_catalog_as_a_separate_source(self) -> None:
         wake_section = next(

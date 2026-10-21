@@ -12,6 +12,7 @@ const WAKE_FAMILY_SETTING_KEYS = new Set([
   "wake_detector_mode",
   "wake_mww_enabled",
   "wake_oww_enabled",
+  "wake_nww_enabled",
   "wake_word",
   "wake_word_catalog_url",
   "wake_word_url",
@@ -20,10 +21,33 @@ const WAKE_FAMILY_SETTING_KEYS = new Set([
   "oww_wake_word",
   "oww_wake_word_url",
   "oww_model_revision",
-  "wake_sensitivity",
-  "wake_environment",
-  "wake_threshold",
-  "wake_sliding_window",
+  "nww_wake_word",
+  "nww_wake_word_url",
+  "nww_model_revision",
+  "nww_architecture",
+  "nww_available_architectures",
+  "wake_profile_threshold",
+  "wake_profile_sliding_window",
+  "wake_profile_close_miss_threshold",
+  "oww_profile_threshold",
+  "oww_profile_patience",
+  "oww_profile_confirmation_threshold",
+  "oww_profile_confirmation_patience",
+  "nww_profile_threshold",
+  "nww_profile_patience",
+  "nww_cnn_profile_threshold",
+  "nww_cnn_profile_patience",
+  "nww_gru_profile_threshold",
+  "nww_gru_profile_patience",
+  "mww_tuning_override_enabled",
+  "mww_threshold_override",
+  "mww_sliding_window_override",
+  "oww_tuning_override_enabled",
+  "oww_threshold_override",
+  "oww_patience_override",
+  "nww_tuning_override_enabled",
+  "nww_threshold_override",
+  "nww_patience_override",
 ]);
 
 const escapeHtml = (value) =>
@@ -425,6 +449,31 @@ class TaterSatellitePanel extends HTMLElement {
       .section-card { margin-bottom: 14px; }
       .section-description { color: var(--secondary-text-color); margin-bottom: 15px; font-size: 14px; }
       .settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(245px, 1fr)); gap: 13px; }
+      .wake-tuning { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--divider-color); }
+      .wake-tuning-head { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; margin-bottom: 12px; }
+      .wake-tuning-head h3 { margin: 0 0 4px; }
+      .wake-tuning-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(225px, 1fr)); gap: 11px; }
+      .wake-tuning-card { padding: 13px; border: 1px solid var(--divider-color); border-radius: 12px; background: var(--secondary-background-color); }
+      .wake-tuning-card.active { border-color: color-mix(in srgb, var(--tater-accent) 55%, var(--divider-color)); box-shadow: inset 0 0 0 1px var(--tater-accent-soft); }
+      .wake-tuning-title { display: flex; justify-content: space-between; gap: 10px; align-items: center; margin-bottom: 5px; }
+      .wake-tuning-title strong { font-size: 14px; }
+      .wake-tuning-card small { display: block; color: var(--secondary-text-color); line-height: 1.35; }
+      .wake-tuning-switch { display: flex; gap: 10px; align-items: center; margin-top: 12px; font-size: 13px; font-weight: 650; }
+      .wake-tuning-switch input { width: 18px; min-height: 18px; margin: 0; }
+      .wake-tuning-inputs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin-top: 12px; }
+      .wake-tuning-inputs .field span { font-size: 12px; }
+      .wake-mode-picker { margin: 14px 0; }
+      .wake-mode-label { margin: 11px 0 7px; color: var(--secondary-text-color); font-size: 11px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+      .wake-mode-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
+      .wake-mode-grid.dual { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .wake-mode-option { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; min-height: 62px; padding: 10px 12px; text-align: left; border: 1px solid var(--divider-color); border-radius: 12px; background: var(--secondary-background-color); color: var(--primary-text-color); }
+      .wake-mode-option i { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; background: var(--tater-accent-soft); color: var(--tater-accent); font-style: normal; font-size: 12px; font-weight: 800; }
+      .wake-mode-option span { display: grid; gap: 2px; }
+      .wake-mode-option small { color: var(--secondary-text-color); font-size: 11px; }
+      .wake-mode-option b { visibility: hidden; color: var(--tater-accent); }
+      .wake-mode-option.active { border-color: var(--tater-accent); box-shadow: inset 0 0 0 1px var(--tater-accent); }
+      .wake-mode-option.active b { visibility: visible; }
+      @media (max-width: 640px) { .wake-mode-grid, .wake-mode-grid.dual { grid-template-columns: 1fr; } }
       .field { display: flex; flex-direction: column; gap: 6px; }
       .field > span { font-size: 13px; font-weight: 600; }
       .field > small { color: var(--secondary-text-color); line-height: 1.35; }
@@ -944,6 +993,15 @@ class TaterSatellitePanel extends HTMLElement {
 
   prepareSettingsDraft(settings) {
     const draft = clone(settings);
+    if (draft.wake_detector_mode === "dual") draft.wake_detector_mode = "mww_oww";
+    if (
+      draft.wake_detector_mode === "mww" &&
+      draft.oww_wake_word === "custom_url" &&
+      String(draft.oww_wake_word_url || "").split("?", 1)[0].endsWith(".wake-bundle.json")
+    ) {
+      draft.wake_word = "custom_url";
+      draft.wake_word_url = draft.oww_wake_word_url;
+    }
     if (
       draft.wake_word === "custom_url" &&
       !draft.wake_model_asset_id &&
@@ -953,6 +1011,15 @@ class TaterSatellitePanel extends HTMLElement {
       draft.wake_word_catalog_url = draft.wake_word_url;
     } else {
       draft.wake_word_catalog_url = "";
+    }
+    if (
+      draft.oww_wake_word === "custom_url" &&
+      isWakeWordCatalogUrl(draft.oww_wake_word_url)
+    ) {
+      draft.oww_wake_word = "catalog";
+      draft.oww_wake_word_catalog_url = draft.oww_wake_word_url;
+    } else {
+      draft.oww_wake_word_catalog_url = "";
     }
     return draft;
   }
@@ -1084,7 +1151,7 @@ class TaterSatellitePanel extends HTMLElement {
       <div class="editor-head">
         <div>
           <h2>Shared Satellite Voice Settings</h2>
-          <div class="muted">One wake profile is shared by every satellite. Choose microWakeWord Only, OWW Where Supported, or Dual Wake Word. ESP and other MWW-only satellites always use the profile's matching MWW model.</div>
+          <div class="muted">One wake profile is shared by every satellite. Choose MWW, OWW, NWW, MWW + OWW, or MWW + NWW. ESP32 and other MWW-only satellites always use the bundle's matching MWW model.</div>
         </div>
       </div>
       ${this.renderSharedWakeEditor(this._wakeDraft || {})}
@@ -1107,12 +1174,137 @@ class TaterSatellitePanel extends HTMLElement {
           </div>
           <span class="badge ${connected ? "online" : ""}">${connected} connected</span>
         </div>
+        ${this.renderWakeModePicker(values)}
         ${this.renderSettingsSections(values, "wake", null, { include: ["wake"], wakeFamily: "echo", bare: true })}
+        ${this.renderWakeTuningOverrides(values)}
         <div class="row-actions" style="margin-top:15px">
           <button data-reset-shared-wake>Discard wake changes</button>
           <button class="primary" data-save-shared-wake ${this._loading ? "disabled" : ""}>Save and update all satellites</button>
         </div>
       </section>
+    `;
+  }
+
+  renderWakeModePicker(values) {
+    const selected = String(values?.wake_detector_mode || "mww_oww");
+    const rows = [
+      {
+        label: "Single model",
+        className: "",
+        options: [
+          ["mww", "MWW", "microWakeWord on every satellite"],
+          ["oww", "OWW", "openWakeWord where supported"],
+          ["nww", "NWW", "NanoWakeWord where supported"],
+        ],
+      },
+      {
+        label: "Dual model",
+        className: "dual",
+        options: [
+          ["mww_oww", "MWW + OWW", "Both models must agree"],
+          ["mww_nww", "MWW + NWW", "Both models must agree"],
+        ],
+      },
+    ];
+    return `
+      <div class="wake-mode-picker">
+        ${rows.map((row) => `
+          <div class="wake-mode-label">${row.label}</div>
+          <div class="wake-mode-grid ${row.className}">
+            ${row.options.map(([value, label, description]) => `
+              <button type="button" class="wake-mode-option ${selected === value ? "active" : ""}" data-wake-mode="${value}">
+                <i>${value === "mww_oww" ? "M+O" : value === "mww_nww" ? "M+N" : label}</i>
+                <span><strong>${label}</strong><small>${description}</small></span><b>✓</b>
+              </button>
+            `).join("")}
+          </div>
+        `).join("")}
+      </div>
+    `;
+  }
+
+  renderWakeTuningOverrides(values) {
+    const mode = String(values?.wake_detector_mode || "mww_oww");
+    const active = {
+      mww: ["mww", "mww_oww", "mww_nww"].includes(mode),
+      oww: ["oww", "mww_oww"].includes(mode),
+      nww: ["nww", "mww_nww"].includes(mode),
+    };
+    const architecture = String(values?.nww_architecture || "cnn").toLowerCase();
+    const owwDual = mode === "mww_oww";
+    const models = [
+      {
+        key: "mww",
+        title: "microWakeWord",
+        enabled: "mww_tuning_override_enabled",
+        threshold: "mww_threshold_override",
+        patience: "mww_sliding_window_override",
+        patienceLabel: "Sliding window",
+        baseThreshold: values?.wake_profile_threshold ?? 0.98,
+        basePatience: values?.wake_profile_sliding_window ?? 5,
+      },
+      {
+        key: "oww",
+        title: "openWakeWord",
+        enabled: "oww_tuning_override_enabled",
+        threshold: "oww_threshold_override",
+        patience: "oww_patience_override",
+        patienceLabel: "Patience",
+        baseThreshold: owwDual
+          ? values?.oww_profile_confirmation_threshold ?? 0.92
+          : values?.oww_profile_threshold ?? 0.99,
+        basePatience: owwDual
+          ? values?.oww_profile_confirmation_patience ?? 3
+          : values?.oww_profile_patience ?? 3,
+      },
+      {
+        key: "nww",
+        title: `NanoWakeWord ${architecture.toUpperCase()}`,
+        enabled: "nww_tuning_override_enabled",
+        threshold: "nww_threshold_override",
+        patience: "nww_patience_override",
+        patienceLabel: "Patience",
+        baseThreshold:
+          values?.[`nww_${architecture}_profile_threshold`] ??
+          values?.nww_profile_threshold ??
+          0.99,
+        basePatience:
+          values?.[`nww_${architecture}_profile_patience`] ??
+          values?.nww_profile_patience ??
+          3,
+      },
+    ].filter((model) => active[model.key]);
+    if (!models.length) return "";
+    return `
+      <div class="wake-tuning">
+        <div class="wake-tuning-head">
+          <div>
+            <h3>Wake model tuning</h3>
+            <div class="muted">Bundle values stay active until you enable an override for that model.</div>
+          </div>
+        </div>
+        <div class="wake-tuning-grid">
+          ${models.map((model) => {
+            const enabled = Boolean(values?.[model.enabled]);
+            return `
+              <article class="wake-tuning-card ${enabled ? "active" : ""}">
+                <div class="wake-tuning-title"><strong>${escapeHtml(model.title)}</strong><span class="badge">Bundle ${escapeHtml(model.baseThreshold)} · ${escapeHtml(model.basePatience)}</span></div>
+                <small>Override the trainer-tested values for built-in, catalog, and custom wake bundles.</small>
+                <label class="wake-tuning-switch">
+                  <input type="checkbox" data-setting="${model.enabled}" data-scope="wake" ${enabled ? "checked" : ""}>
+                  <span>Override bundle values</span>
+                </label>
+                ${enabled ? `
+                  <div class="wake-tuning-inputs">
+                    <label class="field"><span>Threshold</span><input type="number" min="0.01" max="${model.key === "mww" ? "0.99" : "1"}" step="0.01" value="${escapeHtml(values?.[model.threshold] ?? model.baseThreshold)}" data-setting="${model.threshold}" data-scope="wake"></label>
+                    <label class="field"><span>${escapeHtml(model.patienceLabel)}</span><input type="number" min="1" max="${model.key === "mww" ? "10" : "20"}" step="1" value="${escapeHtml(values?.[model.patience] ?? model.basePatience)}" data-setting="${model.patience}" data-scope="wake"></label>
+                  </div>
+                ` : ""}
+              </article>
+            `;
+          }).join("")}
+        </div>
+      </div>
     `;
   }
 
@@ -1135,6 +1327,9 @@ class TaterSatellitePanel extends HTMLElement {
         (section) => {
           const wakeFamily = sectionFilter.wakeFamily || device?.wake_family || "";
           const fields = (section.fields || [])
+            .filter((field) => !(field.scopes || []).length || field.scopes.includes(scope))
+            .filter((field) => !field.override_control)
+            .filter((field) => !(scope === "wake" && field.key === "wake_detector_mode"))
             .filter((field) => !(field.include_boards || []).length || field.include_boards.includes(boardKey))
             .filter((field) => !(field.exclude_boards || []).includes(boardKey))
             .filter((field) => !(field.wake_families || []).length || field.wake_families.includes(wakeFamily))
@@ -1331,8 +1526,9 @@ class TaterSatellitePanel extends HTMLElement {
     return values?.[condition.key] === condition.equals;
   }
 
-  wakeWordCatalogOptions(currentValue = "") {
-    const options = clone(this._wakeWordCatalog?.options || []);
+  wakeWordCatalogOptions(currentValue = "", modelType = "mww") {
+    const sourceKey = modelType === "nww" ? "nww_options" : modelType === "oww" ? "oww_options" : "options";
+    const options = clone(this._wakeWordCatalog?.[sourceKey] || []);
     if (
       currentValue &&
       isWakeWordCatalogUrl(currentValue) &&
@@ -1352,9 +1548,11 @@ class TaterSatellitePanel extends HTMLElement {
     return options;
   }
 
-  wakeWordCatalogDescription(field) {
+  wakeWordCatalogDescription(field, modelType = "mww") {
     const catalog = this._wakeWordCatalog || {};
-    const count = Number(catalog.count || 0);
+    const count = modelType === "mww"
+      ? Number(catalog.count || 0)
+      : this.wakeWordCatalogOptions("", modelType).filter((option) => option.value).length;
     const versions = Array.isArray(catalog.versions) ? catalog.versions : [];
     const range = versions.length
       ? versions.length === 1
@@ -1379,19 +1577,41 @@ class TaterSatellitePanel extends HTMLElement {
       `;
     }
     if (field.type === "select") {
-      const options =
-        field.key === "wake_word_catalog_url"
-          ? this.wakeWordCatalogOptions(value)
-          : field.options || [];
+      const mode = String(values?.wake_detector_mode || "mww_oww");
+      const catalogType = ["nww", "mww_nww"].includes(mode) ? "nww" : "oww";
+      let options = field.key === "wake_word_catalog_url"
+        ? this.wakeWordCatalogOptions(value, "mww")
+        : field.key === "oww_wake_word_catalog_url"
+          ? this.wakeWordCatalogOptions(value, catalogType)
+          : clone(field.options || []);
+      if (field.key === "nww_architecture") {
+        const available = new Set(
+          String(values?.nww_available_architectures || "")
+            .split(",")
+            .map((item) => item.trim().toLowerCase())
+            .filter(Boolean),
+        );
+        const waitingForBundle =
+          String(values?.oww_wake_word || "hey_tater") !== "hey_tater" &&
+          available.size === 0;
+        options = options.map((option) => ({
+          ...option,
+          disabled:
+            waitingForBundle ||
+            (available.size > 0 && !available.has(String(option.value).toLowerCase())),
+        }));
+      }
       const description =
         field.key === "wake_word_catalog_url"
-          ? this.wakeWordCatalogDescription(field)
+          ? this.wakeWordCatalogDescription(field, "mww")
+          : field.key === "oww_wake_word_catalog_url"
+            ? this.wakeWordCatalogDescription(field, catalogType)
           : field.description || "";
       return `
         <label class="field">
           <span>${escapeHtml(field.label)}</span>
           <select ${common}>
-            ${options.map((option) => `<option value="${escapeHtml(option.value)}" ${String(option.value) === String(value) ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}
+            ${options.map((option) => `<option value="${escapeHtml(option.value)}" ${String(option.value) === String(value) ? "selected" : ""} ${option.disabled ? "disabled" : ""}>${escapeHtml(option.label)}${option.disabled ? " — not in bundle" : ""}</option>`).join("")}
           </select>
           ${description ? `<small>${escapeHtml(description)}</small>` : ""}
         </label>
@@ -1797,6 +2017,23 @@ class TaterSatellitePanel extends HTMLElement {
         ),
       ),
     );
+    root.querySelectorAll("[data-wake-mode]").forEach((button) =>
+      button.addEventListener("click", () => {
+        const target = this._wakeDraft;
+        if (!target) return;
+        const value = String(button.dataset.wakeMode || "mww_oww");
+        target.wake_detector_mode = value;
+        if (target.oww_wake_word === "catalog") {
+          const catalogType = ["nww", "mww_nww"].includes(value) ? "nww" : "oww";
+          const selected = this.wakeWordCatalogOptions("", catalogType).find((option) => option.value);
+          target.oww_wake_word_catalog_url = selected?.value || "";
+          target.oww_wake_word_url = selected?.value || "";
+          target.nww_available_architectures = (selected?.architectures || []).join(",");
+        }
+        this._dirty = true;
+        this.render();
+      }),
+    );
     root.querySelectorAll("[data-setting]").forEach((input) => {
       input.addEventListener("change", () => {
         const target = {
@@ -1830,6 +2067,38 @@ class TaterSatellitePanel extends HTMLElement {
           target.wake_word = "catalog";
           target.wake_word_url = value;
           target.wake_model_asset_id = "";
+        } else if (input.dataset.setting === "oww_wake_word") {
+          if (value === "catalog") {
+            const catalogType = ["nww", "mww_nww"].includes(String(target.wake_detector_mode)) ? "nww" : "oww";
+            const selected = this.wakeWordCatalogOptions("", catalogType).find((option) => option.value);
+            target.oww_wake_word_catalog_url = selected?.value || "";
+            target.oww_wake_word_url = selected?.value || "";
+            target.nww_available_architectures = (selected?.architectures || []).join(",");
+          } else if (value === "custom_url") {
+            target.oww_wake_word_catalog_url = "";
+            target.oww_wake_word_url = "";
+            target.nww_available_architectures = "";
+          } else {
+            target.oww_wake_word_catalog_url = "";
+            target.oww_wake_word_url = "";
+            target.nww_available_architectures = "cnn,gru";
+          }
+        } else if (input.dataset.setting === "oww_wake_word_catalog_url") {
+          const catalogType = ["nww", "mww_nww"].includes(String(target.wake_detector_mode)) ? "nww" : "oww";
+          const selected = this.wakeWordCatalogOptions(value, catalogType).find(
+            (option) => String(option.value) === String(value),
+          );
+          target.oww_wake_word = "catalog";
+          target.oww_wake_word_url = value;
+          target.nww_available_architectures = (selected?.architectures || []).join(",");
+        } else if (input.dataset.setting === "wake_detector_mode") {
+          if (target.oww_wake_word === "catalog") {
+            const catalogType = ["nww", "mww_nww"].includes(String(value)) ? "nww" : "oww";
+            const selected = this.wakeWordCatalogOptions("", catalogType).find((option) => option.value);
+            target.oww_wake_word_catalog_url = selected?.value || "";
+            target.oww_wake_word_url = selected?.value || "";
+            target.nww_available_architectures = (selected?.architectures || []).join(",");
+          }
         }
         this._dirty = true;
         const controlsConditionalFields = (this._data.settings_schema || []).some(
@@ -1840,7 +2109,7 @@ class TaterSatellitePanel extends HTMLElement {
         );
         if (
           controlsConditionalFields ||
-          ["wake_word", "wake_detector_mode", "oww_wake_word", "wake_sound", "aec_enabled", "wake_verifier_mode"].includes(
+          ["wake_word", "wake_detector_mode", "oww_wake_word", "oww_wake_word_catalog_url", "nww_architecture", "mww_tuning_override_enabled", "oww_tuning_override_enabled", "nww_tuning_override_enabled", "wake_sound", "aec_enabled", "wake_verifier_mode"].includes(
             input.dataset.setting,
           )
         ) {
