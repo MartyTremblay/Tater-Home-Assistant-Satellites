@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.1.0
+
+- Added the full Tater Echo firmware lineup to Home Assistant OTA discovery:
+  Biscuit, Radar, Checkers, Crown, Athena, and Rook. Echo Show 8 2nd Generation
+  devices now resolve to the Athena release and use the matching Sat Chat video
+  profile.
+- Added safe staged Echo updates. Older screen builds receive the signed OTA
+  compatibility bridge first; Home Assistant verifies the new component-aware
+  updater after reboot before sending the final release.
+- Added per-satellite display controls for Checkers, Crown, Athena, and Rook:
+  normal brightness, ambient-light automatic brightness with a minimum level,
+  scheduled night brightness, and dim, red-clock, or screen-off night modes.
+- Kept the established ESP32-S3-BOX-3 brightness and scheduled-dimming wire
+  contract unchanged, and hide the new Echo controls unless firmware advertises
+  screen power-management support.
+
 ## 1.0.0
 
 - Added NanoWakeWord CNN and GRU support with MWW, OWW, NWW, MWW + OWW, and

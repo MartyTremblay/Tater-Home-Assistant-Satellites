@@ -57,11 +57,13 @@ from .protocol import (
 from .sat_chat import MAX_SAT_CHAT_FRAME_BYTES, TaterSatChatCoordinator
 from .settings import (
     DEFAULT_SETTINGS,
+    ECHO_SCREEN_DEFAULTS,
     SETTINGS_SCHEMA,
     SHARED_WAKE_MODEL_SETTING_KEYS,
     WAKE_FAMILIES,
     WAKE_FAMILY_SETTING_KEYS,
-    board_supports_screen_settings,
+    board_is_echo_screen,
+    board_is_s3_screen,
     firmware_payload,
     merged_settings,
     normalize_settings,
@@ -162,10 +164,13 @@ _SETTINGS_WIRE_GROUPS = (
     ),
     (
         "screen_brightness",
+        "screen_auto_brightness_enabled",
+        "screen_auto_brightness_minimum",
         "screen_night_mode_enabled",
         "screen_night_brightness",
         "screen_night_start",
         "screen_night_end",
+        "screen_night_display",
         "screen_local_time_seconds",
     ),
 )
@@ -730,6 +735,8 @@ class SatelliteRuntime:
                 "in_progress": self.ota_in_progress,
                 "progress": self.ota_progress,
                 "message": self.ota_message,
+                "stage": self.ota.stage,
+                "stage_count": self.ota.stage_count,
             },
             "firmware": {
                 **available,
@@ -1155,11 +1162,16 @@ class TaterSatelliteManager:
             capabilities=runtime.capabilities if runtime is not None else {},
             board=runtime.board if runtime is not None else "",
         )
-        return merged_settings(
+        resolved = merged_settings(
             self.data.get("global_settings"),
             overrides,
             self.wake_family_settings(family),
         )
+        if runtime is not None and board_is_echo_screen(runtime.board):
+            for key, value in ECHO_SCREEN_DEFAULTS.items():
+                if key not in overrides:
+                    resolved[key] = value
+        return resolved
 
     def _adopt_reported_device_volume(
         self, runtime: SatelliteRuntime, status: dict[str, Any]
@@ -1239,7 +1251,7 @@ class TaterSatelliteManager:
             )
         board = runtime.board if runtime is not None else ""
         local_time_seconds: int | None = None
-        if board_supports_screen_settings(board):
+        if board_is_s3_screen(board):
             local_now = dt_util.now()
             local_time_seconds = (
                 (local_now.hour * 60 * 60)
@@ -2082,7 +2094,16 @@ class TaterSatelliteManager:
         if not runtime.connected:
             raise RuntimeError("Satellite is offline")
         target = runtime.firmware_catalog_target
-        signed = await self.firmware.async_prepare(target, "ota")
+        await self.firmware.async_refresh()
+        plan = self.firmware.ota_plan_for_board(target, runtime.capabilities)
+        initial_kind = text(plan.get("initial_kind")) or "ota"
+        final_kind = text(plan.get("final_kind"))
+        migration = (
+            dict(plan.get("migration"))
+            if isinstance(plan.get("migration"), dict)
+            else {}
+        )
+        signed = await self.firmware.async_prepare(target, initial_kind)
         expected_version = text(
             self.firmware.info_for_board(target).get("firmware_version")
         )
@@ -2093,9 +2114,27 @@ class TaterSatelliteManager:
             f"{base_url}/api/tater/satellite/v1/firmware/file/"
             f"{signed.filename}?token={signed.token}"
         )
+        final_command: dict[str, Any] = {}
+        if final_kind:
+            final_signed = await self.firmware.async_prepare(target, final_kind)
+            final_url = (
+                f"{base_url}/api/tater/satellite/v1/firmware/file/"
+                f"{final_signed.filename}?token={final_signed.token}"
+            )
+            final_command = {
+                "url": final_url,
+                "sha256": final_signed.sha256,
+                "size_bytes": final_signed.size_bytes,
+            }
         attempt = runtime.ota.begin(
             expected_version,
             runtime.connection_generation,
+            stage="bridge" if migration else "final",
+            required_capability=migration.get("required_capability"),
+            minimum_capability_version=int(
+                migration.get("minimum_capability_version") or 0
+            ),
+            final_command=final_command,
         )
         runtime.notify()
         if not await runtime.async_send(
@@ -2115,7 +2154,12 @@ class TaterSatelliteManager:
             self._async_verify_ota_timeout(runtime, attempt),
             f"tater_satellite_ota_verify_{runtime.device_id}_{attempt}",
         )
-        return {"ok": True, "url": url, "device": runtime.public_snapshot()}
+        return {
+            "ok": True,
+            "url": url,
+            "staged": bool(migration),
+            "device": runtime.public_snapshot(),
+        }
 
     async def _async_verify_ota_timeout(
         self,
@@ -2597,10 +2641,46 @@ class TaterSatelliteManager:
             await self._update_record_from_hello(runtime, payload)
             self.bluetooth.async_connect_runtime(runtime)
             ota_was_in_progress = runtime.ota.in_progress
-            runtime.ota.note_reconnect(
-                runtime.connection_generation,
-                payload.get("firmware_version"),
-            )
+            if runtime.ota.stage == "bridge":
+                if runtime.ota.bridge_reconnect_ready(
+                    runtime.connection_generation,
+                    runtime.capabilities,
+                ):
+                    final_command = dict(runtime.ota.final_command)
+                    if not final_command.get("url"):
+                        runtime.ota.fail(
+                            "The staged OTA completion artifact is missing."
+                        )
+                    else:
+                        attempt = runtime.ota.begin_final(
+                            runtime.connection_generation
+                        )
+                        if await runtime.async_send("ota.url", final_command):
+                            runtime.add_log(
+                                "info",
+                                runtime.ota.message,
+                                kind="ota.status",
+                            )
+                            self.entry.async_create_background_task(
+                                self.hass,
+                                self._async_verify_ota_timeout(runtime, attempt),
+                                (
+                                    "tater_satellite_ota_verify_"
+                                    f"{runtime.device_id}_{attempt}"
+                                ),
+                            )
+                        else:
+                            runtime.ota.fail(
+                                "Unable to send the final staged OTA command"
+                            )
+                # A bridge reconnect is deliberately not treated as final
+                # completion. The capability check above either starts stage
+                # two or records an actionable failure.
+            else:
+                runtime.ota.note_reconnect(
+                    runtime.connection_generation,
+                    payload.get("firmware_version"),
+                )
             if (
                 ota_was_in_progress
                 and not runtime.ota.in_progress

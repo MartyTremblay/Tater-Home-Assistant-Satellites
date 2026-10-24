@@ -103,6 +103,11 @@ class SatChatCoordinatorTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(kitchen_directory["participants"][0]["busy"])
         self.assertEqual(kitchen_directory["call"]["id"], result["call"]["id"])
 
+    async def test_athena_uses_the_echo_video_profile(self) -> None:
+        athena = FakeRuntime(self.manager, "bedroom", board="athena")
+
+        self.assertEqual(sat_chat._video_receive_profile(athena), "echo-low")
+
     async def test_call_audio_routes_to_peer_and_not_to_assist(self) -> None:
         await self.coordinator.async_start(self.kitchen, "office", mode="audio")
         pcm = b"\x01\x02" * 320

@@ -10,7 +10,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .entity import TaterSatelliteEntity
 from .manager import SatelliteRuntime, TaterSatelliteManager
-from .settings import board_supports_screen_settings
+from .settings import board_is_s3_screen, supports_screen_power_management
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,6 +24,11 @@ class SwitchDefinition:
 
 
 DEFINITIONS = (
+    SwitchDefinition(
+        "screen_auto_brightness_enabled",
+        "Automatic screen brightness",
+        "mdi:brightness-auto",
+    ),
     SwitchDefinition(
         "screen_night_mode_enabled",
         "Scheduled night dimming",
@@ -56,8 +61,16 @@ async def async_setup_entry(
             TaterSettingsSwitch(runtime, definition)
             for definition in DEFINITIONS
             if (
-                definition.key != "screen_night_mode_enabled"
-                or board_supports_screen_settings(runtime.board)
+                not definition.key.startswith("screen_")
+                or (
+                    supports_screen_power_management(
+                        runtime.board, runtime.capabilities
+                    )
+                    and (
+                        definition.key != "screen_auto_brightness_enabled"
+                        or not board_is_s3_screen(runtime.board)
+                    )
+                )
             )
         ],
         async_add_entities,

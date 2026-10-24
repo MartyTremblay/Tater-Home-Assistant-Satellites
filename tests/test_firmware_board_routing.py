@@ -39,8 +39,12 @@ class FirmwareBoardRoutingTests(unittest.TestCase):
         self.assertEqual(keys["echo-dot-2"], "biscuit")
         self.assertEqual(keys["checkers"], "checkers")
         self.assertEqual(keys["echo-show-5"], "checkers")
+        self.assertEqual(keys["athena"], "athena")
+        self.assertEqual(keys["a8h3n2"], "athena")
+        self.assertEqual(keys["echo-show-8-2nd-gen"], "athena")
         self.assertIn("Echo Dot 2", labels["biscuit"])
         self.assertIn("Echo Show 5", labels["checkers"])
+        self.assertIn("Echo Show 8 2nd Gen", labels["athena"])
 
     def test_sat1_production_and_beta_use_distinct_manifest_keys(self) -> None:
         keys = _constant_mapping("BOARD_MANIFEST_KEYS")

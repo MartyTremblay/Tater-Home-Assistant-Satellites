@@ -1,4 +1,4 @@
-"""Time entities for S3 Box display schedules."""
+"""Time entities for supported satellite display schedules."""
 
 from __future__ import annotations
 
@@ -11,12 +11,12 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .entity import TaterSatelliteEntity
 from .manager import SatelliteRuntime, TaterSatelliteManager
-from .settings import board_supports_screen_settings
+from .settings import supports_screen_power_management
 
 
 @dataclass(frozen=True, slots=True)
 class TimeDefinition:
-    """Describe an S3 Box display schedule time."""
+    """Describe a satellite display schedule time."""
 
     key: str
     name: str
@@ -34,7 +34,7 @@ async def async_setup_entry(
     entry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Set up S3 Box display schedule entities."""
+    """Set up satellite display schedule entities."""
     manager: TaterSatelliteManager = entry.runtime_data
     manager.register_platform(
         "time",
@@ -43,7 +43,9 @@ async def async_setup_entry(
                 TaterSettingsTime(runtime, definition)
                 for definition in DEFINITIONS
             ]
-            if board_supports_screen_settings(runtime.board)
+            if supports_screen_power_management(
+                runtime.board, runtime.capabilities
+            )
             else []
         ),
         async_add_entities,
@@ -51,7 +53,7 @@ async def async_setup_entry(
 
 
 class TaterSettingsTime(TaterSatelliteEntity, TimeEntity):
-    """One local-time S3 Box display schedule setting."""
+    """One local-time satellite display schedule setting."""
 
     _attr_entity_category = EntityCategory.CONFIG
 

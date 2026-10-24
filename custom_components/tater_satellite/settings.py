@@ -77,10 +77,13 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "muted": False,
     "audio_output_mode": "auto",
     "screen_brightness": 80,
+    "screen_auto_brightness_enabled": False,
+    "screen_auto_brightness_minimum": 12,
     "screen_night_mode_enabled": False,
     "screen_night_brightness": 10,
     "screen_night_start": "22:00",
     "screen_night_end": "07:00",
+    "screen_night_display": "red_clock",
     "led_brightness": 80,
     "led_color": "#ff5a1f",
     "led_listening_animation": "directional",
@@ -89,6 +92,17 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "led_replying_animation": "voice_ring",
     "led_music_animation": "music_bars",
     "logging_level": "info",
+}
+
+ECHO_SCREEN_DEFAULTS: dict[str, Any] = {
+    "screen_brightness": 35,
+    "screen_auto_brightness_enabled": False,
+    "screen_auto_brightness_minimum": 12,
+    "screen_night_mode_enabled": False,
+    "screen_night_brightness": 3,
+    "screen_night_start": "22:00",
+    "screen_night_end": "07:00",
+    "screen_night_display": "red_clock",
 }
 
 FIRMWARE_SETTING_KEYS = {
@@ -133,10 +147,13 @@ FIRMWARE_SETTING_KEYS = {
     "muted",
     "audio_output_mode",
     "screen_brightness",
+    "screen_auto_brightness_enabled",
+    "screen_auto_brightness_minimum",
     "screen_night_mode_enabled",
     "screen_night_brightness",
     "screen_night_start",
     "screen_night_end",
+    "screen_night_display",
     "led_brightness",
     "led_color",
     "led_listening_animation",
@@ -728,13 +745,16 @@ SETTINGS_SCHEMA: list[dict[str, Any]] = [
     },
     {
         "section": "display",
-        "title": "S3 Box Display",
+        "title": "Display & Night",
         "description": (
-            "Set this S3 Box screen brightness and optionally dim it on a "
-            "daily local-time schedule."
+            "Control this satellite's screen, automatic room-light response, "
+            "and overnight behavior."
         ),
         "scopes": ["device"],
-        "include_boards": ["s3_box"],
+        "include_boards": ["s3_box", "checkers", "crown", "athena", "rook"],
+        "required_capability": "screen_power_management_version",
+        "minimum_capability_version": 1,
+        "capability_fallback_boards": ["s3_box"],
         "fields": [
             {
                 "key": "screen_brightness",
@@ -743,6 +763,33 @@ SETTINGS_SCHEMA: list[dict[str, Any]] = [
                 "min": 0,
                 "max": 100,
                 "step": 1,
+                "description": (
+                    "Normal display brightness. Setting this to 0 turns the "
+                    "backlight off."
+                ),
+            },
+            {
+                "key": "screen_auto_brightness_enabled",
+                "label": "Automatic brightness",
+                "type": "boolean",
+                "exclude_boards": ["s3_box"],
+                "description": (
+                    "Follow the room's ambient-light sensor smoothly. Screen "
+                    "brightness remains the maximum."
+                ),
+            },
+            {
+                "key": "screen_auto_brightness_minimum",
+                "label": "Dimmest automatic level",
+                "type": "number",
+                "min": 1,
+                "max": 50,
+                "step": 1,
+                "exclude_boards": ["s3_box"],
+                "show_when": {
+                    "key": "screen_auto_brightness_enabled",
+                    "equals": True,
+                },
             },
             {
                 "key": "screen_night_mode_enabled",
@@ -762,6 +809,21 @@ SETTINGS_SCHEMA: list[dict[str, Any]] = [
                 "key": "screen_night_end",
                 "label": "Restore at",
                 "type": "time",
+                "show_when": {
+                    "key": "screen_night_mode_enabled",
+                    "equals": True,
+                },
+            },
+            {
+                "key": "screen_night_display",
+                "label": "Night display",
+                "type": "select",
+                "exclude_boards": ["s3_box"],
+                "options": [
+                    {"value": "red_clock", "label": "Dim red clock"},
+                    {"value": "dim", "label": "Dim current display"},
+                    {"value": "off", "label": "Screen off"},
+                ],
                 "show_when": {
                     "key": "screen_night_mode_enabled",
                     "equals": True,
@@ -881,6 +943,7 @@ _ALLOWED = {
     "wake_verifier_mode": {"off", "observe", "enforce"},
     "wake_sound": {row["value"] for row in WAKE_SOUND_OPTIONS},
     "audio_output_mode": {"auto", "internal", "aux", "both"},
+    "screen_night_display": {"dim", "red_clock", "off"},
     "logging_level": {"error", "warning", "info", "debug"},
     "led_listening_animation": {
         row["value"] for row in LISTENING_ANIMATION_OPTIONS
@@ -906,6 +969,7 @@ _BOOL_KEYS = {
     "continued_chat",
     "barge_in_enabled",
     "muted",
+    "screen_auto_brightness_enabled",
     "screen_night_mode_enabled",
 }
 _INT_RANGES = {
@@ -927,6 +991,7 @@ _INT_RANGES = {
     "aec_delay_ms": (0, 220),
     "volume_percent": (0, 100),
     "screen_brightness": (0, 100),
+    "screen_auto_brightness_minimum": (1, 50),
     "screen_night_brightness": (0, 100),
     "led_brightness": (0, 100),
 }
@@ -1019,8 +1084,8 @@ def board_supports_music_led_settings(board: Any) -> bool:
     }
 
 
-def board_supports_screen_settings(board: Any) -> bool:
-    """Return whether a board has the configurable S3 Box display."""
+def board_is_s3_screen(board: Any) -> bool:
+    """Return whether a board uses the established S3 Box screen contract."""
     token = str(board or "").strip().lower().replace("_", "-").replace(" ", "-")
     compact = token.replace("-", "")
     return token in {
@@ -1034,6 +1099,61 @@ def board_supports_screen_settings(board: Any) -> bool:
         "esp32s3box",
         "esp32s3box3",
     }
+
+
+def board_supports_screen_settings(board: Any) -> bool:
+    """Return whether a board has a configurable Tater display."""
+    token = str(board or "").strip().lower().replace("_", "-").replace(" ", "-")
+    compact = token.replace("-", "")
+    return board_is_s3_screen(board) or token in {
+        "checkers",
+        "echo-show-5",
+        "echo-show-5-1st-gen",
+        "crown",
+        "echo-show-8",
+        "echo-show-8-1st-gen",
+        "athena",
+        "a8h3n2",
+        "echo-show-8-2nd-gen",
+        "rook",
+        "echo-spot",
+        "echo-spot-1st-gen",
+    } or compact in {
+        "checkers",
+        "echoshow5",
+        "echoshow51stgen",
+        "crown",
+        "echoshow8",
+        "echoshow81stgen",
+        "athena",
+        "a8h3n2",
+        "echoshow82ndgen",
+        "rook",
+        "echospot",
+        "echospot1stgen",
+    }
+
+
+def board_is_echo_screen(board: Any) -> bool:
+    """Return whether a board is one of the supported Echo displays."""
+    return board_supports_screen_settings(board) and not board_is_s3_screen(board)
+
+
+def supports_screen_power_management(
+    board: Any,
+    capabilities: dict[str, Any] | None = None,
+) -> bool:
+    """Return whether firmware can apply the display power settings."""
+    if board_is_s3_screen(board):
+        return True
+    values = capabilities if isinstance(capabilities, dict) else {}
+    value = values.get("screen_power_management_version")
+    if isinstance(value, bool):
+        return value
+    try:
+        return int(value or 0) >= 1
+    except (TypeError, ValueError):
+        return False
 
 
 def board_supports_audio_output_settings(board: Any) -> bool:
@@ -1117,6 +1237,12 @@ def normalize_settings(
             token = str(value or "").strip().lower()
             if key != "wake_sound":
                 token = token.replace("-", "_")
+            if key == "screen_night_display":
+                token = {
+                    "clock": "red_clock",
+                    "red": "red_clock",
+                    "screen_off": "off",
+                }.get(token, token)
             result[key] = token if token in _ALLOWED[key] else default
         elif key in _BOOL_KEYS:
             result[key] = _boolean(value, bool(default))
@@ -1181,7 +1307,7 @@ def wake_family_for(
     token = str(board or "").strip().lower().replace("_", "-")
     return (
         "echo"
-        if token in {"biscuit", "radar", "checkers", "crown", "rook"}
+        if token in {"biscuit", "radar", "checkers", "crown", "athena", "rook"}
         else "mww"
     )
 
@@ -1255,20 +1381,32 @@ def firmware_payload(
     payload = {
         key: value for key, value in normalized.items() if key in FIRMWARE_SETTING_KEYS
     }
-    if board_supports_screen_settings(board):
+    screen_keys = (
+        "screen_brightness",
+        "screen_auto_brightness_enabled",
+        "screen_auto_brightness_minimum",
+        "screen_night_mode_enabled",
+        "screen_night_brightness",
+        "screen_night_start",
+        "screen_night_end",
+        "screen_night_display",
+    )
+    if supports_screen_power_management(board, capabilities):
+        if board_is_s3_screen(board):
+            for key in (
+                "screen_auto_brightness_enabled",
+                "screen_auto_brightness_minimum",
+                "screen_night_display",
+            ):
+                payload.pop(key, None)
         if local_time_seconds is not None:
-            payload["screen_local_time_seconds"] = max(
-                0,
-                min((24 * 60 * 60) - 1, int(local_time_seconds)),
-            )
+            if board_is_s3_screen(board):
+                payload["screen_local_time_seconds"] = max(
+                    0,
+                    min((24 * 60 * 60) - 1, int(local_time_seconds)),
+                )
     else:
-        for key in (
-            "screen_brightness",
-            "screen_night_mode_enabled",
-            "screen_night_brightness",
-            "screen_night_start",
-            "screen_night_end",
-        ):
+        for key in screen_keys:
             payload.pop(key, None)
     if not board_supports_music_led_settings(board):
         payload.pop("led_music_animation", None)

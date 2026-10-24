@@ -33,7 +33,7 @@ def _video_receive_profile(runtime: SatelliteRuntime | None) -> str:
     board = _text(runtime.board if runtime is not None else "").lower().replace(
         "_", "-"
     )
-    if board in {"checkers", "crown", "rook"}:
+    if board in {"checkers", "crown", "athena", "rook"}:
         return "echo-low"
     return ""
 

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 
@@ -29,21 +29,93 @@ class OtaState:
     reboot_requested: bool = False
     deadline: float = 0.0
     attempt: int = 0
+    stage: str = "final"
+    stage_count: int = 1
+    required_capability: str = ""
+    minimum_capability_version: int = 0
+    final_command: dict[str, Any] = field(default_factory=dict)
 
     def begin(
         self,
         expected_version: Any,
         connection_generation: int,
         *,
+        stage: str = "final",
+        required_capability: Any = "",
+        minimum_capability_version: int = 0,
+        final_command: dict[str, Any] | None = None,
         now: float | None = None,
     ) -> int:
         """Start a new OTA attempt and return its generation token."""
         started_at = time.time() if now is None else now
         self.attempt += 1
         self.in_progress = True
+        self.stage = "bridge" if stage == "bridge" else "final"
+        self.stage_count = 2 if self.stage == "bridge" else 1
         self.progress = 0
-        self.message = "OTA command sent"
+        self.message = (
+            "OTA compatibility bridge command sent (stage 1 of 2)"
+            if self.stage == "bridge"
+            else "OTA command sent"
+        )
         self.expected_version = _text(expected_version)
+        self.initial_connection_generation = max(0, int(connection_generation))
+        self.disconnect_seen = False
+        self.reboot_requested = False
+        self.deadline = started_at + OTA_VERIFY_TIMEOUT_SECONDS
+        self.required_capability = _text(required_capability)
+        self.minimum_capability_version = max(
+            0, int(minimum_capability_version or 0)
+        )
+        self.final_command = dict(final_command or {})
+        return self.attempt
+
+    @staticmethod
+    def _capability_version(capabilities: dict[str, Any], name: str) -> int:
+        value = capabilities.get(name)
+        if isinstance(value, bool):
+            return 1 if value else 0
+        try:
+            return max(0, int(value or 0))
+        except (TypeError, ValueError):
+            return 0
+
+    def bridge_reconnect_ready(
+        self,
+        connection_generation: int,
+        capabilities: dict[str, Any],
+    ) -> bool:
+        """Validate the bridge reboot before the final OTA is sent."""
+        if (
+            not self.in_progress
+            or self.stage != "bridge"
+            or int(connection_generation) <= self.initial_connection_generation
+        ):
+            return False
+        current = self._capability_version(
+            capabilities, self.required_capability
+        )
+        if current < self.minimum_capability_version:
+            self.fail(
+                "The OTA bridge restarted without "
+                f"{self.required_capability} version "
+                f"{self.minimum_capability_version}; the final OTA was not sent."
+            )
+            return False
+        return True
+
+    def begin_final(
+        self,
+        connection_generation: int,
+        *,
+        now: float | None = None,
+    ) -> int:
+        """Advance a verified two-stage migration to its final OTA."""
+        started_at = time.time() if now is None else now
+        self.attempt += 1
+        self.stage = "final"
+        self.progress = 50
+        self.message = "OTA bridge verified; final firmware command sent (stage 2 of 2)"
         self.initial_connection_generation = max(0, int(connection_generation))
         self.disconnect_seen = False
         self.reboot_requested = False
@@ -73,17 +145,22 @@ class OtaState:
         status = _text(payload.get("status")).lower()
         raw_progress = payload.get("progress")
         if isinstance(raw_progress, (int, float)):
-            self.progress = max(0, min(99, int(raw_progress)))
+            progress = max(0, min(100, int(raw_progress)))
+            if self.stage_count == 2:
+                self.progress = (
+                    min(49, int(progress * 0.49))
+                    if self.stage == "bridge"
+                    else min(99, 50 + int(progress * 0.49))
+                )
+            else:
+                self.progress = min(99, progress)
         message = _text(payload.get("message"))
         if status in _FAILED_STATUSES:
             self.fail(message or status)
             return
         if status in _REBOOT_STATUSES:
             self.reboot_requested = True
-            self.message = (
-                "Firmware downloaded. Waiting for the satellite to reconnect "
-                "on the new version."
-            )
+            self.message = self._reconnect_message()
             return
         if message or status:
             self.message = message or status
@@ -93,7 +170,15 @@ class OtaState:
         if not self.in_progress:
             return
         self.disconnect_seen = True
-        self.message = (
+        self.message = self._reconnect_message()
+
+    def _reconnect_message(self) -> str:
+        if self.stage == "bridge":
+            return (
+                "OTA bridge installed. Waiting for the satellite to reconnect "
+                "before stage 2 of 2."
+            )
+        return (
             "Firmware downloaded. Waiting for the satellite to reconnect "
             "on the new version."
         )
@@ -102,6 +187,7 @@ class OtaState:
         """Verify the first post-command connection against the release version."""
         if (
             not self.in_progress
+            or self.stage == "bridge"
             or int(connection_generation) <= self.initial_connection_generation
         ):
             return

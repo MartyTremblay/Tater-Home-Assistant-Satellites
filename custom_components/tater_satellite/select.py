@@ -17,9 +17,11 @@ from .settings import (
     THINKING_ANIMATION_OPTIONS,
     TOOL_CALL_ANIMATION_OPTIONS,
     WAKE_SOUND_OPTIONS,
+    board_is_s3_screen,
     board_supports_audio_output_settings,
     board_supports_led_settings,
     board_supports_music_led_settings,
+    supports_screen_power_management,
 )
 
 PREFERRED_PIPELINE = "preferred"
@@ -40,6 +42,12 @@ def _option_values(rows) -> tuple[str, ...]:
 
 
 DEFINITIONS = (
+    SelectDefinition(
+        "screen_night_display",
+        "Night display",
+        ("dim", "red_clock", "off"),
+        "mdi:weather-night",
+    ),
     SelectDefinition(
         "wake_sensitivity",
         "Wake sensitivity",
@@ -120,6 +128,15 @@ async def async_setup_entry(
                 for definition in DEFINITIONS
                 if (
                     (
+                        definition.key != "screen_night_display"
+                        or (
+                            supports_screen_power_management(
+                                runtime.board, runtime.capabilities
+                            )
+                            and not board_is_s3_screen(runtime.board)
+                        )
+                    )
+                    and (
                         definition.key != "audio_output_mode"
                         or board_supports_audio_output_settings(runtime.board)
                     )

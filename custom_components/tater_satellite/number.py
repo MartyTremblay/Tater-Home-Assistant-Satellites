@@ -10,7 +10,11 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .entity import TaterSatelliteEntity
 from .manager import SatelliteRuntime, TaterSatelliteManager
-from .settings import board_supports_led_settings, board_supports_screen_settings
+from .settings import (
+    board_is_s3_screen,
+    board_supports_led_settings,
+    supports_screen_power_management,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,6 +48,15 @@ DEFINITIONS = (
         1,
         "%",
         "mdi:brightness-6",
+    ),
+    NumberDefinition(
+        "screen_auto_brightness_minimum",
+        "Dimmest automatic screen level",
+        1,
+        50,
+        1,
+        "%",
+        "mdi:brightness-auto",
     ),
     NumberDefinition(
         "screen_night_brightness",
@@ -120,7 +133,15 @@ async def async_setup_entry(
             if (
                 (
                     not definition.key.startswith("screen_")
-                    or board_supports_screen_settings(runtime.board)
+                    or (
+                        supports_screen_power_management(
+                            runtime.board, runtime.capabilities
+                        )
+                        and (
+                            definition.key != "screen_auto_brightness_minimum"
+                            or not board_is_s3_screen(runtime.board)
+                        )
+                    )
                 )
                 and (
                     definition.key != "led_brightness"

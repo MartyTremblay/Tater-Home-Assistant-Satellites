@@ -101,6 +101,55 @@ class OtaCompletionTests(unittest.TestCase):
         self.assertFalse(expired)
         self.assertTrue(state.in_progress)
 
+    def test_staged_ota_maps_bridge_and_final_progress(self) -> None:
+        state = ota.OtaState()
+        first_attempt = state.begin(
+            "v3.1.1",
+            7,
+            stage="bridge",
+            required_capability="ota_bundle_components_version",
+            minimum_capability_version=1,
+            final_command={"url": "https://example.test/final"},
+            now=100.0,
+        )
+        state.apply_status({"status": "writing", "progress": 100})
+        self.assertEqual(state.progress, 49)
+        self.assertFalse(
+            state.bridge_reconnect_ready(
+                7, {"ota_bundle_components_version": 1}
+            )
+        )
+        self.assertTrue(
+            state.bridge_reconnect_ready(
+                8, {"ota_bundle_components_version": 1}
+            )
+        )
+
+        final_attempt = state.begin_final(8, now=200.0)
+        self.assertGreater(final_attempt, first_attempt)
+        self.assertEqual(state.progress, 50)
+        state.apply_status({"status": "writing", "progress": 50})
+        self.assertEqual(state.progress, 74)
+        state.note_reconnect(9, "v3.1.1")
+        self.assertFalse(state.in_progress)
+        self.assertEqual(state.progress, 100)
+
+    def test_staged_ota_stops_when_bridge_capability_is_missing(self) -> None:
+        state = ota.OtaState()
+        state.begin(
+            "v3.1.1",
+            2,
+            stage="bridge",
+            required_capability="ota_bundle_components_version",
+            minimum_capability_version=1,
+        )
+
+        ready = state.bridge_reconnect_ready(3, {})
+
+        self.assertFalse(ready)
+        self.assertFalse(state.in_progress)
+        self.assertIn("final OTA was not sent", state.message)
+
 
 if __name__ == "__main__":
     unittest.main()

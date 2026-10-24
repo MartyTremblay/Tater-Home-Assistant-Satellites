@@ -1308,6 +1308,16 @@ class TaterSatellitePanel extends HTMLElement {
     `;
   }
 
+  capabilityRequirementMet(definition, device, boardKey) {
+    const required = String(definition?.required_capability || "").trim();
+    if (!required) return true;
+    if ((definition.capability_fallback_boards || []).includes(boardKey)) return true;
+    const raw = device?.capabilities?.[required];
+    const current = raw === true ? 1 : Number(raw || 0);
+    const minimum = Number(definition.minimum_capability_version || 1);
+    return Number.isFinite(current) && current >= minimum;
+  }
+
   renderSettingsSections(values, scope, device = null, sectionFilter = {}) {
     const boardKey = String(device?.board_key || device?.board || "")
       .trim()
@@ -1321,6 +1331,7 @@ class TaterSatellitePanel extends HTMLElement {
           section.include_boards.includes(boardKey),
       )
       .filter((section) => !(section.exclude_boards || []).includes(boardKey))
+      .filter((section) => this.capabilityRequirementMet(section, device, boardKey))
       .filter((section) => !(sectionFilter.exclude || []).includes(section.section))
       .filter((section) => !(sectionFilter.include || []).length || sectionFilter.include.includes(section.section))
       .map(
@@ -1332,6 +1343,7 @@ class TaterSatellitePanel extends HTMLElement {
             .filter((field) => !(scope === "wake" && field.key === "wake_detector_mode"))
             .filter((field) => !(field.include_boards || []).length || field.include_boards.includes(boardKey))
             .filter((field) => !(field.exclude_boards || []).includes(boardKey))
+            .filter((field) => this.capabilityRequirementMet(field, device, boardKey))
             .filter((field) => !(field.wake_families || []).length || field.wake_families.includes(wakeFamily))
             .filter((field) => !(field.detector_modes || []).length || field.detector_modes.includes(String(values?.wake_detector_mode || "mww")))
             .filter((field) => this.fieldVisible(field, values));
@@ -1692,7 +1704,7 @@ class TaterSatellitePanel extends HTMLElement {
       <section class="card section-card" style="margin-top:14px">
         <h2>Browser USB Flasher</h2>
         <p class="muted">Connect the satellite directly to this computer and use Chrome or Edge to open its USB device picker.</p>
-        <p class="muted">Biscuit and Checkers use their model-specific Echo factory installers. ThirdReality S420 factory installation and recovery use Tater Local USB with the debug board. Their verified Wi-Fi OTA updates appear above.</p>
+        <p class="muted">Echo devices use their model-specific Echo factory installers. ThirdReality S420 factory installation and recovery use Tater Local USB with the debug board. Their verified Wi-Fi OTA updates appear above.</p>
         <p class="muted">${escapeHtml(browserCapability.message)}</p>
         <div class="firmware-hosted-flasher">
           <span class="firmware-hosted-flasher-copy">
@@ -2002,7 +2014,7 @@ class TaterSatellitePanel extends HTMLElement {
     );
     root.querySelectorAll("[data-ota]").forEach((button) =>
       button.addEventListener("click", () => {
-        if (!confirm("Install the board-matched Tater Native OTA image now?")) return;
+        if (!confirm("Install the board-matched Tater firmware OTA image now?")) return;
         this.run(
           () => this.api("POST", `firmware/install/${button.dataset.ota}`, {}),
           "OTA update started. The satellite will reconnect after flashing.",

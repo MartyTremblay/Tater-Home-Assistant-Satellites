@@ -105,6 +105,36 @@ def _echo_manifest() -> dict[str, Any]:
                     },
                 },
             },
+            "athena": {
+                "display_name": "Amazon Echo Show 8 2nd Generation (2021)",
+                "amazon_codename": "athena",
+                "artifacts": {
+                    "factory": {
+                        "name": "tater-echo-athena-v0.2.0-factory.tar.gz",
+                        "sha256": "e" * 64,
+                        "size": 12288,
+                    },
+                    "ota": {
+                        "name": "tater-echo-athena-v0.2.0-ota.zip",
+                        "sha256": "f" * 64,
+                        "size": 9216,
+                    },
+                    "ota_bridge": {
+                        "name": "tater-echo-athena-v0.2.0-ota-bridge.zip",
+                        "sha256": "1" * 64,
+                        "size": 7168,
+                    },
+                },
+                "ota_migrations": [
+                    {
+                        "id": "linux-app-components-v1",
+                        "required_capability": "ota_bundle_components_version",
+                        "minimum_capability_version": 1,
+                        "bridge_artifact": "ota_bridge",
+                        "final_artifact": "ota",
+                    }
+                ],
+            },
         },
     }
 
@@ -115,7 +145,7 @@ class EchoFirmwareSupportTests(unittest.TestCase):
         normalized = _echo_normalizer()(_echo_manifest(), source_url=source_url)
         devices = {row["key"]: row for row in normalized["devices"]}
 
-        self.assertEqual(set(devices), {"biscuit", "checkers"})
+        self.assertEqual(set(devices), {"biscuit", "checkers", "athena"})
         self.assertEqual(devices["biscuit"]["firmware_version"], "v0.2.0")
         self.assertEqual(
             devices["checkers"]["artifacts"]["ota"]["path"],
@@ -128,11 +158,25 @@ class EchoFirmwareSupportTests(unittest.TestCase):
         self.assertFalse(devices["biscuit"]["browser_usb_supported"])
         self.assertFalse(devices["checkers"]["browser_usb_supported"])
         self.assertEqual(devices["checkers"]["_source_url"], source_url)
+        self.assertEqual(devices["athena"]["firmware_target"], "athena")
+        self.assertEqual(
+            devices["athena"]["ota_migrations"][0]["bridge_artifact"],
+            "ota_bridge",
+        )
+        self.assertIn("ota_bridge", devices["athena"]["artifacts"])
 
     def test_echo_manifest_rejects_unverified_artifact_metadata(self) -> None:
         manifest = _echo_manifest()
         manifest["targets"]["checkers"]["artifacts"]["ota"]["sha256"] = "unverified"
         with self.assertRaisesRegex(ValueError, "artifact metadata is invalid"):
+            _echo_normalizer()(manifest)
+
+    def test_echo_manifest_rejects_unsafe_ota_migration(self) -> None:
+        manifest = _echo_manifest()
+        manifest["targets"]["athena"]["ota_migrations"][0][
+            "bridge_artifact"
+        ] = "missing"
+        with self.assertRaisesRegex(ValueError, "OTA migration is invalid"):
             _echo_normalizer()(manifest)
 
     def test_ota_command_includes_integrity_metadata(self) -> None:
@@ -141,6 +185,8 @@ class EchoFirmwareSupportTests(unittest.TestCase):
         self.assertIn('target = runtime.firmware_catalog_target', source)
         self.assertIn('"sha256": signed.sha256', source)
         self.assertIn('"size_bytes": signed.size_bytes', source)
+        self.assertIn("ota_plan_for_board", source)
+        self.assertIn("bridge_reconnect_ready", source)
 
     def test_echo_release_page_and_factory_boundary_are_exposed(self) -> None:
         update_source = UPDATE_PATH.read_text(encoding="utf-8")

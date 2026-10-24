@@ -61,8 +61,9 @@ integration from **Devices & services**.
   ESP32 and older firmware safely receive the matching MWW fallback
 - Shared voice defaults and per-satellite settings for sensitivity, wake sounds,
   trainer captures, conversation behavior, AEC, microphone mute, voice-state
-  LEDs, music-reactive ring animations on supported Echo and ESP satellites, S3
-  Box screen brightness and night dimming, and firmware logging
+  LEDs, music-reactive ring animations on supported Echo and ESP satellites,
+  display brightness, automatic room-light dimming, scheduled night display,
+  and firmware logging
 - Per-satellite speaker volume with a main-card slider and a standard Home
   Assistant number entity
 - Satellite1 output routing with automatic jack detection plus Internal, AUX,
@@ -73,7 +74,8 @@ integration from **Devices & services**.
   bundles, NanoWakeWord CNN/GRU selection, and custom WAV wake sounds
 - Secure Wake Word Trainer pairing and automatic wake-word publishing
 - Board-aware OTA updates and browser USB recovery for Voice PE, Satellite1,
-  Satellite1 Beta.1/rev4.1, ReSpeaker XVF3800, and ESP32-S3-BOX-3
+  Satellite1 Beta.1/rev4.1, ReSpeaker XVF3800, ESP32-S3-BOX-3, and all Tater
+  Echo targets
 
 ## Pair a satellite
 
@@ -97,11 +99,13 @@ using the physical setup-reset gesture documented in the
 
 ## Bluetooth through an Echo satellite
 
-Echo Dot 2nd Generation (Biscuit), Echo Show 5 1st Generation (Checkers), and
-Echo Spot 1st Generation (Rook) satellites running Tater Echo Firmware 2.4.0 or
-newer can act as native Home Assistant Bluetooth scanners. Advertisements and
-active GATT traffic use the satellite's existing authenticated WebSocket; no
-separate Bluetooth bridge service or network listener is required.
+Echo Dot 2nd Generation (Biscuit), Echo 2nd Generation (Radar), Echo Show 5 1st
+Generation (Checkers), Echo Show 8 1st Generation (Crown), Echo Show 8 2nd
+Generation (Athena), and Echo Spot 1st Generation (Rook) satellites running
+current Tater Echo Firmware can act as native Home Assistant Bluetooth
+scanners. Advertisements and active GATT traffic use the satellite's existing
+authenticated WebSocket; no separate Bluetooth bridge service or network
+listener is required.
 
 Open **Tater Satellites -> Bluetooth** to see connected Echo scanners and nearby
 devices. For a PIN-protected peripheral, choose the Echo that will hold the bond,
@@ -109,6 +113,20 @@ enter the device's six-digit Bluetooth PIN, and select **Pair**. The PIN is sent
 only for that pairing attempt and is not saved. Home Assistant then uses the
 bonded Echo as the device's connectable Bluetooth path. Use **Unpair** to remove
 the saved bond from that Echo.
+
+## Display brightness and night mode
+
+Open a screen satellite's settings in **Tater Satellites** to set its normal
+brightness and daily night schedule. Echo Show 5 (Checkers), both Echo Show 8
+generations (Crown and Athena), and Echo Spot (Rook) can also follow their
+ambient-light sensor with a selectable minimum brightness. Night mode can dim
+the normal display, show a low-brightness red clock, or turn the screen off.
+Calls, timers, and voice activity remain visible when the red-clock mode is
+active.
+
+The controls are exposed per satellite and only when Echo firmware advertises
+the screen power-management capability. ESP32-S3-BOX-3 retains its established
+manual-brightness and scheduled-dimming controls.
 
 ## Tater Audio, stereo, and multi-room playback
 
@@ -271,10 +289,12 @@ The **Firmware & Recovery** tab reads the latest official Tater Native, Tater
 Echo, and Tater ThirdReality release manifests and matches images by the
 firmware target reported by each satellite. Home Assistant downloads the
 requested image, verifies its published size and SHA-256 hash, and exposes it
-through a short-lived local URL. Echo Dot 2 (`biscuit`), Echo Show 5 first
-generation (`checkers`), and ThirdReality Voice & Music Assistant
-(`thirdreality_s420`) receive the same update entity, availability check,
-progress, reboot verification, and OTA flow as the other satellites.
+through a short-lived local URL. Echo Dot 2 (`biscuit`), Echo 2 (`radar`), Echo
+Show 5 first generation (`checkers`), Echo Show 8 first generation (`crown`),
+Echo Show 8 second generation (`athena`), Echo Spot first generation (`rook`),
+and ThirdReality Voice & Music Assistant (`thirdreality_s420`) receive the same
+update entity, availability check, progress, reboot verification, and OTA flow
+as the other satellites.
 
 - Use **Install update** for a connected satellite. The integration sends the
   board-matched OTA image and tracks progress through the satellite entity.
@@ -285,7 +305,10 @@ progress, reboot verification, and OTA flow as the other satellites.
 Echo factory installation is intentionally not offered through ESP Web Tools.
 Use the model-specific factory archive and installer published by Tater Echo
 Firmware. After that first installation, normal Biscuit and Checkers updates
-are wireless from Home Assistant.
+are wireless from Home Assistant, as are Radar, Crown, Athena, and Rook updates.
+When an older screen build needs the newer component-aware updater, Home
+Assistant installs the published compatibility bridge, verifies its capability
+after reboot, and then sends the final release automatically.
 
 ThirdReality S420 factory installation and recovery are also intentionally not
 offered through ESP Web Tools. They use the Amlogic Tater Local USB flow and

@@ -59,22 +59,27 @@ class S3BoxScreenSettingsTests(unittest.TestCase):
         self.assertNotIn("screen_night_start", voicepe_payload)
         self.assertNotIn("screen_local_time_seconds", voicepe_payload)
 
-    def test_panel_section_is_s3_device_only(self) -> None:
+    def test_panel_section_keeps_the_s3_contract(self) -> None:
         section = next(
             row for row in settings.SETTINGS_SCHEMA if row["section"] == "display"
         )
         self.assertEqual(section["scopes"], ["device"])
-        self.assertEqual(section["include_boards"], ["s3_box"])
-        self.assertEqual(
-            {field["key"] for field in section["fields"]},
-            {
-                "screen_brightness",
-                "screen_night_mode_enabled",
-                "screen_night_brightness",
-                "screen_night_start",
-                "screen_night_end",
-            },
-        )
+        self.assertIn("s3_box", section["include_boards"])
+        by_key = {field["key"]: field for field in section["fields"]}
+        for key in {
+            "screen_brightness",
+            "screen_night_mode_enabled",
+            "screen_night_brightness",
+            "screen_night_start",
+            "screen_night_end",
+        }:
+            self.assertNotIn("s3_box", by_key[key].get("exclude_boards", []))
+        for key in {
+            "screen_auto_brightness_enabled",
+            "screen_auto_brightness_minimum",
+            "screen_night_display",
+        }:
+            self.assertIn("s3_box", by_key[key]["exclude_boards"])
 
 
 if __name__ == "__main__":

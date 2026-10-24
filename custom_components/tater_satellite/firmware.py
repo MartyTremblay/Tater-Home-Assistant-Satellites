@@ -78,6 +78,35 @@ def version_tuple(value: Any) -> tuple[int, int, int, int, str]:
     )
 
 
+def capability_version(capabilities: dict[str, Any], name: Any) -> int:
+    """Return a non-negative integer capability version."""
+    value = capabilities.get(str(name or "").strip())
+    if isinstance(value, bool):
+        return 1 if value else 0
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def required_ota_migration(
+    device: dict[str, Any],
+    capabilities: dict[str, Any],
+) -> dict[str, Any]:
+    """Return the first staged OTA migration this firmware still needs."""
+    migrations = device.get("ota_migrations")
+    if not isinstance(migrations, list):
+        return {}
+    for row in migrations:
+        if not isinstance(row, dict):
+            continue
+        capability = str(row.get("required_capability") or "").strip()
+        minimum = int(row.get("minimum_capability_version") or 0)
+        if capability_version(capabilities, capability) < minimum:
+            return dict(row)
+    return {}
+
+
 def normalize_echo_manifest(
     payload: dict[str, Any],
     *,
@@ -99,7 +128,7 @@ def normalize_echo_manifest(
         raw_artifacts = raw_target.get("artifacts")
         artifacts: dict[str, dict[str, Any]] = {}
         if isinstance(raw_artifacts, dict):
-            for kind in ("factory", "ota"):
+            for kind in ("factory", "ota", "ota_bridge"):
                 raw_artifact = raw_artifacts.get(kind)
                 if not isinstance(raw_artifact, dict):
                     continue
@@ -127,6 +156,45 @@ def normalize_echo_manifest(
                 }
         if not artifacts:
             continue
+        raw_migrations = raw_target.get("ota_migrations")
+        if raw_migrations is not None and not isinstance(raw_migrations, list):
+            raise ValueError(f"Tater Echo {key} OTA migrations are invalid")
+        migrations: list[dict[str, Any]] = []
+        for raw_migration in raw_migrations or []:
+            if not isinstance(raw_migration, dict):
+                raise ValueError(f"Tater Echo {key} OTA migration is invalid")
+            migration_id = str(raw_migration.get("id") or "").strip().lower()
+            capability = str(
+                raw_migration.get("required_capability") or ""
+            ).strip().lower()
+            try:
+                minimum = int(raw_migration.get("minimum_capability_version") or 0)
+            except (TypeError, ValueError):
+                minimum = 0
+            bridge_kind = str(
+                raw_migration.get("bridge_artifact") or ""
+            ).strip().lower()
+            final_kind = str(
+                raw_migration.get("final_artifact") or "ota"
+            ).strip().lower()
+            if (
+                re.fullmatch(r"[a-z0-9][a-z0-9._-]*", migration_id) is None
+                or re.fullmatch(r"[a-z0-9][a-z0-9._-]*", capability) is None
+                or minimum < 1
+                or bridge_kind == final_kind
+                or bridge_kind not in artifacts
+                or final_kind not in artifacts
+            ):
+                raise ValueError(f"Tater Echo {key} OTA migration is invalid")
+            migrations.append(
+                {
+                    "id": migration_id,
+                    "required_capability": capability,
+                    "minimum_capability_version": minimum,
+                    "bridge_artifact": bridge_kind,
+                    "final_artifact": final_kind,
+                }
+            )
         devices.append(
             {
                 "key": key,
@@ -136,10 +204,12 @@ def normalize_echo_manifest(
                     or key
                 ),
                 "board": str(raw_target.get("amazon_codename") or key),
+                "firmware_target": key,
                 "firmware_version": version,
                 "display_version": display_version(version),
                 "flash_size": "",
                 "artifacts": artifacts,
+                "ota_migrations": migrations,
                 "browser_usb_supported": False,
                 "factory_install_external": True,
                 "release_url": ECHO_FIRMWARE_RELEASE_URL,
@@ -324,7 +394,7 @@ class FirmwareCatalog:
     async def _async_echo_catalog(
         self,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
-        """Load the combined Biscuit and Checkers Echo release catalog."""
+        """Load the combined multi-target Tater Echo release catalog."""
         raw_manifest = await self._async_json(ECHO_FIRMWARE_MANIFEST_URL)
         manifest = normalize_echo_manifest(
             raw_manifest,
@@ -454,6 +524,8 @@ class FirmwareCatalog:
                 ),
                 "has_ota": isinstance(artifacts, dict)
                 and isinstance(artifacts.get("ota"), dict),
+                "has_ota_bridge": isinstance(artifacts, dict)
+                and isinstance(artifacts.get("ota_bridge"), dict),
                 "has_factory": isinstance(artifacts, dict)
                 and isinstance(artifacts.get("factory"), dict),
                 "browser_usb_supported": bool(
@@ -464,6 +536,11 @@ class FirmwareCatalog:
                 ),
                 "release_url": str(row.get("release_url") or LATEST_FIRMWARE_URL),
                 "manifest_url": str(row.get("_source_url") or ""),
+                "ota_migrations": [
+                    dict(item)
+                    for item in row.get("ota_migrations", [])
+                    if isinstance(item, dict)
+                ],
             }
         return {
             "available": bool(devices),
@@ -505,6 +582,22 @@ class FirmwareCatalog:
             if board_manifest_key(row.get("key") or row.get("board")) == key:
                 return row
         raise KeyError(f"No released firmware is available for {board}")
+
+    def ota_plan_for_board(
+        self,
+        board: Any,
+        capabilities: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Choose the direct or staged OTA artifacts for one satellite."""
+        device = self._device_row(board)
+        migration = required_ota_migration(device, capabilities or {})
+        if migration:
+            return {
+                "initial_kind": str(migration["bridge_artifact"]),
+                "final_kind": str(migration["final_artifact"]),
+                "migration": migration,
+            }
+        return {"initial_kind": "ota", "final_kind": "", "migration": {}}
 
     def _artifact_row(self, board: Any, kind: str) -> dict[str, Any]:
         device = self._device_row(board)
