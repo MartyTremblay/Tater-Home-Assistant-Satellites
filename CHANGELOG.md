@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.1
+
+- Preserved and logged detailed native playback failures reported by a
+  satellite instead of reducing them to a silent success/failure boolean.
+- Home Assistant's existing streaming WAV reply path now plays incrementally
+  on Echo firmware advertising streaming voice playback version 1; older
+  satellite behavior remains unchanged.
+
 ## 1.1.0
 
 - Added the full Tater Echo firmware lineup to Home Assistant OTA discovery:

@@ -558,8 +558,13 @@ class SatelliteRuntime:
             with contextlib.suppress(ValueError):
                 self.playback_waiters.remove(waiter)
 
-    def playback_finished(self, ok: bool) -> None:
+    def playback_finished(self, ok: bool, error: str = "") -> None:
         """Resolve the oldest pending playback waiter."""
+        if not ok:
+            detail = text(error) or "The satellite did not provide an error message."
+            message = f"Voice playback failed: {detail}"
+            self.add_log("error", message, kind="playback.finished")
+            _LOGGER.warning("%s on %s", message, self.name)
         resolved_waiter = False
         while self.playback_waiters:
             waiter = self.playback_waiters.popleft()
@@ -2496,7 +2501,10 @@ class TaterSatelliteManager:
             "playback.finished",
             "tts.finished",
         }:
-            runtime.playback_finished(bool(payload.get("ok", True)))
+            runtime.playback_finished(
+                bool(payload.get("ok", True)),
+                text(payload.get("error")),
+            )
             await runtime.async_send_json(
                 envelope(
                     "announcement.finished.ack",
