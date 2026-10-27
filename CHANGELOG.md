@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Cut Home Assistant CPU use with Echo Bluetooth proxies. Forwarded Bluetooth
+  advertisements, which arrive several times a second, no longer rewrite every
+  satellite entity, and each entity refresh now resolves the satellite's
+  settings once instead of on every read. On a Home Assistant Yellow with one
+  Crown this had held a CPU core at 100%.
+
 ## 1.1.1
 
 - Preserved and logged detailed native playback failures reported by a
