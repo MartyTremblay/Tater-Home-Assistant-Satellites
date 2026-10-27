@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Echo screen satellites (Checkers, Crown, Athena, and Rook) now show Home
+  Assistant's local time instead of UTC. Home Assistant sends the clock and
+  current UTC offset when a screen connects and refreshes it every minute, so
+  daylight-saving changes apply without a reconnect.
+
 ## 1.1.1
 
 - Preserved and logged detailed native playback failures reported by a
