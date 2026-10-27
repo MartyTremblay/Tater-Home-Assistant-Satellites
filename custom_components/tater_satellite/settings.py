@@ -85,6 +85,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "screen_night_end": "07:00",
     "screen_night_display": "red_clock",
     "screen_climate_entity": "",
+    "screen_room_temperature_entities": "",
     "led_brightness": 80,
     "led_color": "#ff5a1f",
     "led_listening_animation": "directional",
@@ -772,6 +773,21 @@ SETTINGS_SCHEMA: list[dict[str, Any]] = [
                 ),
             },
             {
+                "key": "screen_room_temperature_entities",
+                "label": "Room temperatures",
+                "type": "entity_list",
+                "max_items": 6,
+                "exclude_boards": ["s3_box"],
+                "required_capability": "screen_climate",
+                # Filled from Home Assistant's temperature sensors on each load.
+                "options": [],
+                "empty_label": "No temperature sensors found in Home Assistant.",
+                "description": (
+                    "Up to six readings shown beside the thermostat, labelled "
+                    "with each sensor's area. Echo Spot shows the first three."
+                ),
+            },
+            {
                 "key": "screen_brightness",
                 "label": "Screen brightness",
                 "type": "number",
@@ -1029,6 +1045,7 @@ _FLOAT_RANGES = {
 }
 _TEXT_LIMITS = {
     "screen_climate_entity": 255,
+    "screen_room_temperature_entities": 1024,
     "wake_word_url": 255,
     "wake_model_revision": 64,
     "wake_model_asset_id": 128,

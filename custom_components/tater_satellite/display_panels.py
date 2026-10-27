@@ -16,10 +16,13 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.event import async_track_state_change_event
 
 from .display_payloads import (
+    MAX_ROOM_TEMPERATURES,
     camera_frame,
     cameras_payload,
     climate_payload,
     entity_hvac_mode,
+    parse_entity_list,
+    room_temperature_row,
     supports_display_cameras,
     supports_display_climate,
     unavailable_climate_payload,
@@ -64,6 +67,28 @@ class TaterDisplayPanelCoordinator:
             return _text(overrides["screen_climate_entity"])
         # Assignments made before the setting existed.
         return _text(runtime.record.get("climate_entity_id"))
+
+    @staticmethod
+    def room_temperature_entity_ids(runtime: SatelliteRuntime) -> list[str]:
+        """Return the temperature sensors chosen for the Climate panel."""
+        overrides = runtime.record.get("overrides")
+        value = (
+            overrides.get("screen_room_temperature_entities")
+            if isinstance(overrides, dict)
+            else ""
+        )
+        return parse_entity_list(value, "sensor", MAX_ROOM_TEMPERATURES)
+
+    def room_temperature_field_options(self) -> list[dict[str, str]]:
+        """Return every temperature sensor, labelled by area and name."""
+        rows = []
+        for state in self.hass.states.async_all("sensor"):
+            if state.attributes.get("device_class") != "temperature":
+                continue
+            area = self._area_name(state.entity_id)
+            label = f"{area} · {state.name}" if area and area != state.name else state.name
+            rows.append({"value": state.entity_id, "label": label})
+        return sorted(rows, key=lambda row: row["label"].lower())
 
     def climate_field_options(self) -> list[dict[str, str]]:
         """Return the Thermostat field's dashboard options."""
@@ -112,8 +137,15 @@ class TaterDisplayPanelCoordinator:
         unsub = self._climate_unsubs.pop(runtime.device_id, None)
         if unsub is not None:
             unsub()
-        entity_id = self.climate_entity_id(runtime)
-        if not entity_id or not supports_display_climate(runtime.capabilities):
+        entity_ids = [
+            entity_id
+            for entity_id in (
+                self.climate_entity_id(runtime),
+                *self.room_temperature_entity_ids(runtime),
+            )
+            if entity_id
+        ]
+        if not entity_ids or not supports_display_climate(runtime.capabilities):
             return
 
         @callback
@@ -125,7 +157,7 @@ class TaterDisplayPanelCoordinator:
             )
 
         self._climate_unsubs[runtime.device_id] = async_track_state_change_event(
-            self.hass, [entity_id], _changed
+            self.hass, entity_ids, _changed
         )
 
     async def async_push_climate(self, runtime: SatelliteRuntime) -> bool:
@@ -144,6 +176,21 @@ class TaterDisplayPanelCoordinator:
                 room_name=self._area_name(entity_id) or state.name,
                 temperature_unit=self.hass.config.units.temperature_unit,
             )
+        rooms = []
+        for sensor_id in self.room_temperature_entity_ids(runtime):
+            sensor = self.hass.states.get(sensor_id)
+            if sensor is None:
+                continue
+            row = room_temperature_row(
+                sensor_id,
+                sensor.state,
+                sensor.attributes,
+                room_name=self._area_name(sensor_id) or sensor.name,
+            )
+            if row is not None:
+                rooms.append(row)
+        if rooms:
+            payload["room_temperatures"] = rooms
         return await runtime.async_send("display.climate", payload)
 
     async def async_set_climate_entity(

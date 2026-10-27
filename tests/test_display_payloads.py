@@ -96,6 +96,38 @@ class ClimatePayloadTests(unittest.TestCase):
         self.assertEqual(payloads.unavailable_climate_payload(), {"available": False})
 
 
+class RoomTemperatureTests(unittest.TestCase):
+    def test_entity_list_keeps_unique_sensors_up_to_limit(self) -> None:
+        value = " sensor.a, climate.x ,sensor.b,sensor.a,,sensor.c"
+        self.assertEqual(
+            payloads.parse_entity_list(value, "sensor", 2), ["sensor.a", "sensor.b"]
+        )
+        self.assertEqual(payloads.parse_entity_list(None, "sensor", 6), [])
+
+    def test_room_row_uses_sensor_unit_and_skips_non_numeric(self) -> None:
+        self.assertEqual(
+            payloads.room_temperature_row(
+                "sensor.den", "68.4", {"unit_of_measurement": "°F"}, room_name="Den"
+            ),
+            {
+                "room_id": "sensor.den",
+                "room_name": "Den",
+                "temperature": 68.4,
+                "temperature_unit": "F",
+            },
+        )
+        self.assertEqual(
+            payloads.room_temperature_row(
+                "sensor.den", "20", {"unit_of_measurement": "°C"}, room_name="Den"
+            )["temperature_unit"],
+            "C",
+        )
+        for state in ("unavailable", "unknown", ""):
+            self.assertIsNone(
+                payloads.room_temperature_row("sensor.den", state, {}, room_name="Den")
+            )
+
+
 class CameraPayloadTests(unittest.TestCase):
     ROWS = [
         {"id": "camera.front_door", "name": "Front door", "room": "Porch", "available": True},

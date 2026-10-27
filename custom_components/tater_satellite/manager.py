@@ -1940,6 +1940,10 @@ class TaterSatelliteManager:
             for field in section.get("fields", []):
                 if field.get("key") == "screen_climate_entity":
                     field["options"] = self.display_panels.climate_field_options()
+                elif field.get("key") == "screen_room_temperature_entities":
+                    field["options"] = (
+                        self.display_panels.room_temperature_field_options()
+                    )
         return schema
 
     async def async_set_device_settings(
@@ -1978,7 +1982,9 @@ class TaterSatelliteManager:
         patch = normalize_settings(device_values, base=base, partial=True)
         existing.update(patch)
         runtime.record["overrides"] = existing
-        climate_changed = "screen_climate_entity" in patch
+        climate_changed = bool(
+            {"screen_climate_entity", "screen_room_temperature_entities"} & set(patch)
+        )
         if pipeline_id is not None:
             runtime.record["pipeline_id"] = text(pipeline_id)
         if vad_sensitivity is not None:

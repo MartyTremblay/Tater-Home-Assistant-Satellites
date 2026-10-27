@@ -68,6 +68,41 @@ def entity_hvac_mode(screen_mode: Any, entity_modes: Iterable[Any]) -> str:
     return ""
 
 
+# The Crown's Climate panel has room for six readings.
+MAX_ROOM_TEMPERATURES = 6
+
+
+def parse_entity_list(value: Any, domain: str, limit: int) -> list[str]:
+    """Split a comma-separated setting into unique entity ids of one domain."""
+    entity_ids: list[str] = []
+    for item in str(value or "").split(","):
+        entity_id = item.strip()
+        if entity_id.startswith(f"{domain}.") and entity_id not in entity_ids:
+            entity_ids.append(entity_id)
+    return entity_ids[:limit]
+
+
+def room_temperature_row(
+    entity_id: str,
+    state: str,
+    attributes: Mapping[str, Any],
+    *,
+    room_name: str,
+) -> dict[str, Any] | None:
+    """Build one room_temperatures row, or None if there is no reading."""
+    temperature = _number(state)
+    if temperature is None:
+        return None
+    return {
+        "room_id": entity_id,
+        "room_name": room_name,
+        "temperature": temperature,
+        "temperature_unit": temperature_unit_letter(
+            str(attributes.get("unit_of_measurement") or "")
+        ),
+    }
+
+
 def unavailable_climate_payload() -> dict[str, Any]:
     """Return a payload that tells the screen no thermostat is configured."""
     return {"available": False}

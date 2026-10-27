@@ -15,6 +15,9 @@
   Cameras lists every Home Assistant camera and streams snapshots of the
   selected one about once a second until the screen closes it. Doorbell
   talkback is not supported.
+- Choose up to six temperature sensors for the Climate panel's Room
+  temperatures cards with the new Room temperatures checklist under Display &
+  Night. Each card is labelled with the sensor's area and updates live.
 
 ## 1.1.1
 
