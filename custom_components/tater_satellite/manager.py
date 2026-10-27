@@ -44,6 +44,7 @@ from .display_clock import (
     display_clock_payload,
     supports_display_clock,
 )
+from .display_panels import TaterDisplayPanelCoordinator
 from .firmware import FirmwareCatalog, board_manifest_key, version_tuple
 from .intercom import TaterIntercomCoordinator, is_intercom_request
 from .media import TaterMediaCoordinator
@@ -776,6 +777,7 @@ class TaterSatelliteManager:
         self.media = TaterMediaCoordinator(self)
         self.intercom = TaterIntercomCoordinator(self)
         self.sat_chat = TaterSatChatCoordinator(self)
+        self.display_panels = TaterDisplayPanelCoordinator(self)
         self.bluetooth = TaterBluetoothProxyManager(self)
         self._save_lock = asyncio.Lock()
         self._pairing_code = ""
@@ -991,6 +993,7 @@ class TaterSatelliteManager:
         self._shutting_down = True
         await self.bluetooth.async_shutdown()
         await self.sat_chat.async_shutdown()
+        await self.display_panels.async_shutdown()
         await self.intercom.async_shutdown()
         await self.media.async_shutdown()
         for runtime in tuple(self.runtimes.values()):
@@ -2417,6 +2420,10 @@ class TaterSatelliteManager:
         if self.media.handle_message(runtime, kind, payload):
             runtime.notify()
             return
+        if kind.startswith("display.") and await self.display_panels.async_handle_message(
+            runtime, kind, payload
+        ):
+            return
         if kind.startswith("sat_chat."):
             result = await self.sat_chat.async_handle_message(runtime, kind, payload)
             if result is not None:
@@ -2741,6 +2748,7 @@ class TaterSatelliteManager:
             await runtime.async_send("state", {"state": "idle"})
             await self.async_push_settings(runtime)
             await self.async_push_display_clock(runtime)
+            await self.display_panels.async_connect_runtime(runtime)
             runtime.notify()
             await self.sat_chat.async_refresh_directories()
 
@@ -2827,6 +2835,7 @@ class TaterSatelliteManager:
                 runtime.websocket = None
                 runtime.connected = False
                 await self.sat_chat.async_handle_disconnect(runtime)
+                await self.display_panels.async_handle_disconnect(runtime)
                 runtime.ota.note_disconnect()
                 runtime.finish_audio()
                 runtime.fail_playback_waiters()
