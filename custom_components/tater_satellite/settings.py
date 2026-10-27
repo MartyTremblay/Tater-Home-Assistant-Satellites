@@ -84,6 +84,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "screen_night_start": "22:00",
     "screen_night_end": "07:00",
     "screen_night_display": "red_clock",
+    "screen_climate_entity": "",
     "led_brightness": 80,
     "led_color": "#ff5a1f",
     "led_listening_animation": "directional",
@@ -757,6 +758,20 @@ SETTINGS_SCHEMA: list[dict[str, Any]] = [
         "capability_fallback_boards": ["s3_box"],
         "fields": [
             {
+                "key": "screen_climate_entity",
+                "label": "Thermostat",
+                "type": "select",
+                "exclude_boards": ["s3_box"],
+                "required_capability": "screen_climate",
+                # Filled from Home Assistant's climate entities on each load.
+                "options": [{"value": "", "label": "None"}],
+                "description": (
+                    "Shown on the touchscreen's Climate panel. Its buttons "
+                    "change this entity, so pick a room thermostat, not a "
+                    "water heater."
+                ),
+            },
+            {
                 "key": "screen_brightness",
                 "label": "Screen brightness",
                 "type": "number",
@@ -1013,6 +1028,7 @@ _FLOAT_RANGES = {
     "close_miss_threshold": (0.01, 0.99),
 }
 _TEXT_LIMITS = {
+    "screen_climate_entity": 255,
     "wake_word_url": 255,
     "wake_model_revision": 64,
     "wake_model_asset_id": 128,

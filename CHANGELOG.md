@@ -8,8 +8,9 @@
   daylight-saving changes apply without a reconnect.
 - The touchscreen Tater menu's Climate and Cameras panels now work with Home
   Assistant on screens whose firmware advertises `screen_climate` and
-  `screen_cameras`. Choose a thermostat per satellite with the new Thermostat
-  select: its state follows Home Assistant live, and on-screen temperature and
+  `screen_cameras`. Choose a thermostat per satellite under Display & Night
+  (or with the Thermostat select entity): its state follows Home Assistant
+  live, and on-screen temperature and
   mode changes call `climate.set_temperature` and `climate.set_hvac_mode`.
   Cameras lists every Home Assistant camera and streams snapshots of the
   selected one about once a second until the screen closes it. Doorbell

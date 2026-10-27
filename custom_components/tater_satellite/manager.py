@@ -1933,6 +1933,15 @@ class TaterSatelliteManager:
             "wake_word_name": wake_word,
         }
 
+    def _settings_schema(self) -> list[dict[str, Any]]:
+        """Return the panel schema with Home Assistant entity choices filled in."""
+        schema = _json_copy(SETTINGS_SCHEMA, [])
+        for section in schema:
+            for field in section.get("fields", []):
+                if field.get("key") == "screen_climate_entity":
+                    field["options"] = self.display_panels.climate_field_options()
+        return schema
+
     async def async_set_device_settings(
         self,
         device_id: str,
@@ -1969,6 +1978,7 @@ class TaterSatelliteManager:
         patch = normalize_settings(device_values, base=base, partial=True)
         existing.update(patch)
         runtime.record["overrides"] = existing
+        climate_changed = "screen_climate_entity" in patch
         if pipeline_id is not None:
             runtime.record["pipeline_id"] = text(pipeline_id)
         if vad_sensitivity is not None:
@@ -1977,6 +1987,8 @@ class TaterSatelliteManager:
                 value if value in {"default", "relaxed", "aggressive"} else "default"
             )
         await self.async_save()
+        if climate_changed:
+            await self.display_panels.async_refresh_runtime(runtime)
         if runtime.connected and not await self.async_push_settings(runtime):
             raise RuntimeError(
                 f"Settings were saved, but they could not be sent to {runtime.name}."
@@ -1992,7 +2004,9 @@ class TaterSatelliteManager:
         runtime.record["overrides"] = {}
         runtime.record.pop("wake_verifier_phrase", None)
         runtime.record.pop("wake_verifier_phrase_url", None)
+        runtime.record.pop("climate_entity_id", None)
         await self.async_save()
+        await self.display_panels.async_refresh_runtime(runtime)
         if runtime.connected and not await self.async_push_settings(runtime):
             raise RuntimeError(
                 f"Settings were reset, but they could not be sent to {runtime.name}."
@@ -2366,7 +2380,7 @@ class TaterSatelliteManager:
                 family: self.wake_family_settings(family)
                 for family in sorted(WAKE_FAMILIES)
             },
-            "settings_schema": _json_copy(SETTINGS_SCHEMA, []),
+            "settings_schema": self._settings_schema(),
             "assets": assets,
             "stereo_pairs": self.media.list_pairs(),
             "intercom": self.intercom.snapshot(),
@@ -2748,7 +2762,7 @@ class TaterSatelliteManager:
             await runtime.async_send("state", {"state": "idle"})
             await self.async_push_settings(runtime)
             await self.async_push_display_clock(runtime)
-            await self.display_panels.async_connect_runtime(runtime)
+            await self.display_panels.async_refresh_runtime(runtime)
             runtime.notify()
             await self.sat_chat.async_refresh_directories()
 

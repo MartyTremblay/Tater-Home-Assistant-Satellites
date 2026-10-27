@@ -59,7 +59,21 @@ class TaterDisplayPanelCoordinator:
     @staticmethod
     def climate_entity_id(runtime: SatelliteRuntime) -> str:
         """Return the thermostat assigned to this satellite, if any."""
+        overrides = runtime.record.get("overrides")
+        if isinstance(overrides, dict) and "screen_climate_entity" in overrides:
+            return _text(overrides["screen_climate_entity"])
+        # Assignments made before the setting existed.
         return _text(runtime.record.get("climate_entity_id"))
+
+    def climate_field_options(self) -> list[dict[str, str]]:
+        """Return the Thermostat field's dashboard options."""
+        return [
+            {"value": "", "label": "None"},
+            *[
+                {"value": entity_id, "label": label}
+                for label, entity_id in self.climate_options()
+            ],
+        ]
 
     def climate_options(self) -> list[tuple[str, str]]:
         """Return (label, entity_id) for every thermostat, labelled by name."""
@@ -88,10 +102,11 @@ class TaterDisplayPanelCoordinator:
 
     # Climate
 
-    async def async_connect_runtime(self, runtime: SatelliteRuntime) -> None:
+    async def async_refresh_runtime(self, runtime: SatelliteRuntime) -> None:
         """Track the satellite's thermostat and push its current state."""
         self._track_climate(runtime)
         await self.async_push_climate(runtime)
+
 
     def _track_climate(self, runtime: SatelliteRuntime) -> None:
         unsub = self._climate_unsubs.pop(runtime.device_id, None)
@@ -138,11 +153,10 @@ class TaterDisplayPanelCoordinator:
         entity_id = _text(entity_id)
         if entity_id and not entity_id.startswith("climate."):
             raise ValueError(f"{entity_id} is not a climate entity")
-        runtime.record["climate_entity_id"] = entity_id
-        await self.manager.async_save()
-        self._track_climate(runtime)
-        await self.async_push_climate(runtime)
-        runtime.notify()
+        # The settings save refreshes the panel through async_refresh_runtime.
+        await self.manager.async_set_device_settings(
+            runtime.device_id, {"screen_climate_entity": entity_id}
+        )
 
     async def _async_climate_action(
         self, runtime: SatelliteRuntime, payload: dict[str, Any]
