@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.2
+
+- Used the firmware's ordered wake pre-roll boundary to keep the local wake
+  phrase out of Home Assistant command STT and VAD while forwarding immediate
+  post-wake speech without an artificial delay.
+- Preserved full-stream behavior for older firmware and added a bounded
+  fail-open path when marker-aware firmware does not deliver its boundary.
+
 ## 1.1.1
 
 - Preserved and logged detailed native playback failures reported by a
