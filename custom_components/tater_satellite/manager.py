@@ -2542,6 +2542,10 @@ class TaterSatelliteManager:
                 )
             )
             return
+        if kind == "voice.audio_boundary":
+            if runtime.assist_entity is not None:
+                runtime.assist_entity.device_audio_boundary(payload)
+            return
         if kind in {"voice.stop", "audio.stop"}:
             capture = self.intercom.finish_capture(
                 runtime,
