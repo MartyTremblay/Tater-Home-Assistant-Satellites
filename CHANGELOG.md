@@ -7,6 +7,23 @@
   current UTC offset when a screen connects and refreshes it every minute, so
   daylight-saving changes apply without a reconnect.
 
+## 1.1.3
+
+- Fixed HTTP 400 responses when saving Voice Defaults, including STT Wake
+  Check, while using the built-in wake word or another non-catalog companion
+  wake model.
+- Kept panel-only companion catalog fields out of global settings requests and
+  made the bridge safely discard empty legacy catalog fields without weakening
+  validation for explicit catalog selections.
+
+## 1.1.2
+
+- Used the firmware's ordered wake pre-roll boundary to keep the local wake
+  phrase out of Home Assistant command STT and VAD while forwarding immediate
+  post-wake speech without an artificial delay.
+- Preserved full-stream behavior for older firmware and added a bounded
+  fail-open path when marker-aware firmware does not deliver its boundary.
+
 ## 1.1.1
 
 - Preserved and logged detailed native playback failures reported by a

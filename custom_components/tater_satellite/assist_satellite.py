@@ -25,6 +25,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .manager import SatelliteRuntime, TaterSatelliteManager
 from .timers import timer_event_command
+from .wake_audio import WakePrerollGate
 from .wake_word_catalog import is_catalog_url
 
 _LOGGER = logging.getLogger(__name__)
@@ -97,6 +98,7 @@ class TaterAssistSatellite(assist_satellite.AssistSatelliteEntity):
         self._attr_name = "Voice Assistant"
         self._bridge_task: asyncio.Task[None] | None = None
         self._pipeline_event_lock = asyncio.Lock()
+        self._wake_preroll_gate = WakePrerollGate()
         self._attr_tts_options = {
             tts.ATTR_PREFERRED_FORMAT: "wav",
             tts.ATTR_PREFERRED_SAMPLE_RATE: 16000,
@@ -315,6 +317,17 @@ class TaterAssistSatellite(assist_satellite.AssistSatelliteEntity):
         """Start an Assist run requested by firmware."""
         await self.async_device_voice_stop({"abort": True})
         self.runtime.reset_audio()
+        audio_format = (
+            payload.get("audio_format")
+            if isinstance(payload.get("audio_format"), dict)
+            else {}
+        )
+        self._wake_preroll_gate.start(
+            payload.get(
+                "wake_preroll_boundary",
+                audio_format.get("wake_preroll_boundary"),
+            )
+        )
         wake_word = str(
             payload.get("wake_word") or payload.get("wake_word_phrase") or ""
         ).replace("_", " ")
@@ -330,11 +343,35 @@ class TaterAssistSatellite(assist_satellite.AssistSatelliteEntity):
 
     def device_audio(self, data: bytes) -> None:
         """Accept a PCM audio chunk from firmware."""
-        self.runtime.add_audio(data)
+        for chunk in self._wake_preroll_gate.add_audio(data):
+            self.runtime.add_audio(chunk)
+
+    def device_audio_boundary(self, payload: dict[str, Any]) -> bool:
+        """Apply an ordered boundary between local wake and command audio."""
+        accepted = self._wake_preroll_gate.mark_boundary(
+            payload.get("kind"),
+            payload.get("version"),
+        )
+        if accepted:
+            _LOGGER.debug(
+                "Wake pre-roll boundary received for %s",
+                self.runtime.device_id,
+            )
+        return accepted
 
     async def async_device_voice_stop(self, payload: dict[str, Any]) -> None:
         """Stop or finalize a firmware-requested Assist run."""
         abort = bool(payload.get("abort"))
+        fallback = self._wake_preroll_gate.finish(abort=abort)
+        if fallback:
+            _LOGGER.warning(
+                "Wake pre-roll boundary missing for %s; forwarding %s buffered "
+                "audio chunks to Assist",
+                self.runtime.device_id,
+                len(fallback),
+            )
+            for chunk in fallback:
+                self.runtime.add_audio(chunk)
         self.runtime.finish_audio()
         if abort:
             with contextlib.suppress(Exception):
