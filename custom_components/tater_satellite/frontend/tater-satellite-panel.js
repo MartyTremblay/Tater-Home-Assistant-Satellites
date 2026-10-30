@@ -19,6 +19,7 @@ const WAKE_FAMILY_SETTING_KEYS = new Set([
   "wake_model_revision",
   "wake_model_asset_id",
   "oww_wake_word",
+  "oww_wake_word_catalog_url",
   "oww_wake_word_url",
   "oww_model_revision",
   "nww_wake_word",
