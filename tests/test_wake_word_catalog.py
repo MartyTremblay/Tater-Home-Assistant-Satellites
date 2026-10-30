@@ -161,6 +161,25 @@ class WakeWordCatalogTests(unittest.TestCase):
         self.assertEqual(resolved["wake_word"], "custom_url")
         self.assertEqual(resolved["wake_word_url"], V1_URL)
 
+    def test_empty_orphaned_catalog_fields_do_not_block_global_saves(self) -> None:
+        resolved = catalog.resolve_wake_word_source_values(
+            {
+                "oww_wake_word_catalog_url": "",
+                "wake_verifier_mode": "observe",
+            }
+        )
+
+        self.assertEqual(resolved, {"wake_verifier_mode": "observe"})
+
+    def test_explicit_catalog_selection_still_requires_a_catalog_url(self) -> None:
+        with self.assertRaisesRegex(ValueError, "official Tater catalog"):
+            catalog.resolve_wake_word_source_values(
+                {
+                    "oww_wake_word": "catalog",
+                    "oww_wake_word_catalog_url": "",
+                }
+            )
+
     def test_companion_catalog_enforces_oww_v7_and_nww_v8(self) -> None:
         oww = catalog.resolve_wake_word_source_values(
             {
@@ -281,6 +300,10 @@ class WakeWordCatalogTests(unittest.TestCase):
         self.assertIn("class WakeWordCatalogView", http)
         self.assertIn('this.api("GET", "wake-word/catalog")', panel)
         self.assertIn("prepareSettingsDraft", panel)
+        wake_keys = panel.split(
+            "const WAKE_FAMILY_SETTING_KEYS = new Set([", 1
+        )[1].split("]);", 1)[0]
+        self.assertIn('"oww_wake_word_catalog_url"', wake_keys)
         self.assertIn('_CATALOG_WAKE_PREFIX = "catalog:"', assist)
         self.assertIn("wake_word_catalog.snapshot()", assist)
         self.assertIn("async_get_integration(hass, DOMAIN)", integration)
