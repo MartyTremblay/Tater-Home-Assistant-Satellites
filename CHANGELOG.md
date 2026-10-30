@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.3
+
+- Fixed HTTP 400 responses when saving Voice Defaults, including STT Wake
+  Check, while using the built-in wake word or another non-catalog companion
+  wake model.
+- Kept panel-only companion catalog fields out of global settings requests and
+  made the bridge safely discard empty legacy catalog fields without weakening
+  validation for explicit catalog selections.
+
 ## 1.1.2
 
 - Used the firmware's ordered wake pre-roll boundary to keep the local wake
