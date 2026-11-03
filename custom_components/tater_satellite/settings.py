@@ -76,6 +76,10 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "volume_percent": 80,
     "muted": False,
     "audio_output_mode": "auto",
+    "dnd_enabled": False,
+    "dnd_schedule_enabled": False,
+    "dnd_start": "22:00",
+    "dnd_end": "07:00",
     "screen_brightness": 80,
     "screen_auto_brightness_enabled": False,
     "screen_auto_brightness_minimum": 12,
@@ -150,6 +154,10 @@ FIRMWARE_SETTING_KEYS = {
     "volume_percent",
     "muted",
     "audio_output_mode",
+    "dnd_enabled",
+    "dnd_schedule_enabled",
+    "dnd_start",
+    "dnd_end",
     "screen_brightness",
     "screen_auto_brightness_enabled",
     "screen_auto_brightness_minimum",
@@ -168,6 +176,7 @@ FIRMWARE_SETTING_KEYS = {
     "led_music_animation",
     "logging_level",
 }
+DND_SETTING_KEYS = {"dnd_enabled", "dnd_schedule_enabled", "dnd_start", "dnd_end"}
 
 WAKE_WORD_OPTIONS = [
     {"value": "hey_tater", "label": "Hey Tater (built in)"},
@@ -773,6 +782,49 @@ SETTINGS_SCHEMA: list[dict[str, Any]] = [
         ],
     },
     {
+        "section": "dnd",
+        "title": "Do Not Disturb",
+        "description": (
+            "Silence music, announcements, wake sounds, and other non-critical "
+            "playback on this satellite. Timers and alarms remain audible, and "
+            "the microphone stays available so you can turn DND off by voice."
+        ),
+        "scopes": ["device"],
+        "required_capability": "do_not_disturb",
+        "fields": [
+            {
+                "key": "dnd_enabled",
+                "label": "Do Not Disturb now",
+                "type": "boolean",
+                "description": (
+                    "Manually keep DND on. Turning this off still leaves an "
+                    "active daily DND window in effect."
+                ),
+            },
+            {
+                "key": "dnd_schedule_enabled",
+                "label": "Daily DND schedule",
+                "type": "boolean",
+                "description": (
+                    "Automatically turn DND on and off at the same local times "
+                    "each day."
+                ),
+            },
+            {
+                "key": "dnd_start",
+                "label": "Turn on at",
+                "type": "time",
+                "show_when": {"key": "dnd_schedule_enabled", "equals": True},
+            },
+            {
+                "key": "dnd_end",
+                "label": "Turn off at",
+                "type": "time",
+                "show_when": {"key": "dnd_schedule_enabled", "equals": True},
+            },
+        ],
+    },
+    {
         "section": "display",
         "title": "Display & Night",
         "description": (
@@ -1041,6 +1093,8 @@ _BOOL_KEYS = {
     "muted",
     "screen_auto_brightness_enabled",
     "screen_night_mode_enabled",
+    "dnd_enabled",
+    "dnd_schedule_enabled",
 }
 _INT_RANGES = {
     "wake_sliding_window": (1, 10),
@@ -1102,6 +1156,8 @@ _TEXT_LIMITS = {
 _TIME_KEYS = {
     "screen_night_start",
     "screen_night_end",
+    "dnd_start",
+    "dnd_end",
 }
 _HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 
@@ -1226,6 +1282,12 @@ def supports_screen_power_management(
         return int(value or 0) >= 1
     except (TypeError, ValueError):
         return False
+
+
+def supports_do_not_disturb(capabilities: dict[str, Any] | None = None) -> bool:
+    """Return whether firmware enforces per-satellite Do Not Disturb."""
+    values = capabilities if isinstance(capabilities, dict) else {}
+    return values.get("do_not_disturb") is True
 
 
 def supports_screen_clock_format(
@@ -1460,6 +1522,7 @@ def firmware_payload(
     board: Any = "",
     capabilities: dict[str, Any] | None = None,
     local_time_seconds: int | None = None,
+    utc_offset_seconds: int | None = None,
 ) -> dict[str, Any]:
     """Return only values understood by the firmware."""
     normalized = normalize_settings(settings)
@@ -1499,6 +1562,16 @@ def firmware_payload(
         payload.pop("led_music_animation", None)
     if not board_supports_audio_output_settings(board):
         payload.pop("audio_output_mode", None)
+    if supports_do_not_disturb(capabilities):
+        # Echo firmware keeps UTC and evaluates the DND window with this
+        # offset, as Tater sends it with every settings snapshot.
+        if utc_offset_seconds is not None:
+            payload["utc_offset_seconds"] = max(
+                -18 * 60 * 60, min(18 * 60 * 60, int(utc_offset_seconds))
+            )
+    else:
+        for key in DND_SETTING_KEYS:
+            payload.pop(key, None)
     profile_threshold = float(normalized["wake_profile_threshold"])
     adjustment = WAKE_SENSITIVITY_ADJUSTMENTS.get(
         str(normalized["wake_sensitivity"]), 0.0

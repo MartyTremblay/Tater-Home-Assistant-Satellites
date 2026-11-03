@@ -130,6 +130,23 @@ The controls are exposed per satellite and only when Echo firmware advertises
 the screen power-management capability. ESP32-S3-BOX-3 retains its established
 manual-brightness and scheduled-dimming controls.
 
+## Do Not Disturb
+
+Open an Echo satellite's settings in **Tater Satellites** to use **Do Not
+Disturb**. It silences music, announcements, wake sounds, and other
+non-critical playback on that satellite. Timers and alarms remain audible, and
+the microphone stays available so DND can be turned off by voice. The firmware
+enforces it, so other sources on the network cannot bypass it.
+
+Turn it on now, or set a daily window with start and end times. The two are
+additive, overnight windows are supported, and matching times mean all day.
+Each satellite also gets a **Do Not Disturb** switch, a schedule switch, start
+and end time entities, and a **Do Not Disturb active** sensor for automations.
+
+The window follows Home Assistant's time zone, including daylight-saving
+changes. The controls appear only when Echo firmware advertises
+`do_not_disturb` (Tater Echo firmware 4.0.0 and later).
+
 ## Tater Audio, stereo, and multi-room playback
 
 Current Tater Native, Tater Echo, and Tater ThirdReality firmware expose a

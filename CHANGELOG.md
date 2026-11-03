@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Added per-satellite Do Not Disturb for Echo satellites, matching Tater: a
+  manual control and a daily window, enforced by the firmware. It appears in
+  the panel and as switch, time, and binary sensor entities only when firmware
+  advertises `do_not_disturb`, and the window follows Home Assistant's time
+  zone across daylight-saving changes.
+
 ## 1.2.1
 
 - Improved Echo screen cameras by preferring a camera's continuous Home
